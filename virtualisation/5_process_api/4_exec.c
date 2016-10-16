@@ -44,6 +44,26 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <errno.h>
+#include <string.h>
+
+static const char prog_path[] = "/bin/ls";
+static const char prog_name[] = "ls";
+
+int call_execl() {
+    int rc = execl("/bin/ls", ".", (char *)0);
+    return rc;
+}
+
+int call_execle() {
+    char *env[] = { "COLUMNS=5", (char *)0 };
+    // The second argument is necessary, otherwise the call fails with
+    // errno 14, Bad address
+    int rc = execle("/bin/ls", "ls", ".", (char *)0, env);
+    return rc;
+}
+
+
 int main(int argc, char const *argv[])
 {
     int forkrc = fork();
@@ -51,7 +71,24 @@ int main(int argc, char const *argv[])
         printf("Error: could not fork.\n");
         exit(1);
     } else if (forkrc == 0) {
-        
+        int exec_rc;
+
+        // exec_rc = call_execl();
+        exec_rc = call_execle();
+        // exec_rc = call_execlp();
+        // exec_rc = call_execv();
+        // exec_rc = call_execvp();
+        // exec_rc = call_execvP();
+
+        if (exec_rc == -1) {
+            int exec_errno = errno;
+            printf("The exec call failed with errno: %d, %s\n",
+                   exec_errno, strerror(exec_errno));
+        }
+
+    } else {
+        wait(0);
     }
     return 0;
 }
+
