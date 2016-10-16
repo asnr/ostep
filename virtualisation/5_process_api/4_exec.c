@@ -47,11 +47,10 @@
 #include <errno.h>
 #include <string.h>
 
-static const char prog_path[] = "/bin/ls";
-static const char prog_name[] = "ls";
+static const char LS_PATH[] = "/bin/ls";
 
 int call_execl() {
-    int rc = execl("/bin/ls", ".", (char *)0);
+    int rc = execl(LS_PATH, "ls", ".", (char *)0);
     return rc;
 }
 
@@ -59,7 +58,34 @@ int call_execle() {
     char *env[] = { "COLUMNS=5", (char *)0 };
     // The second argument is necessary, otherwise the call fails with
     // errno 14, Bad address
-    int rc = execle("/bin/ls", "ls", ".", (char *)0, env);
+    int rc = execle(LS_PATH, "ls", ".", (char *)0, env);
+    return rc;
+}
+
+int call_execlp() {
+    // Note that a non-p exec* would fail if the first argument was
+    // just "ls"
+    int rc = execlp("ls", "ls", ".", (char *)0);
+    return rc;
+}
+
+int call_execv() {
+    char *args[] = { "ls", "-l", (char *)0 };
+    int rc = execv(LS_PATH, args);
+    return rc;
+}
+
+int call_execvp() {
+    char *args[] = { "ls", "-l", (char *)0 };
+    int rc = execvp("ls", args);
+    return rc;
+}
+
+int call_execvP() {
+    char *args[] = { "ls", "-l", (char *)0 };
+    // Replacing the PATH (2nd) argument with the user home "~/"
+    // throws errno 2, "No such file or directory"
+    int rc = execvP("ls", "/bin", args);
     return rc;
 }
 
@@ -73,8 +99,8 @@ int main(int argc, char const *argv[])
     } else if (forkrc == 0) {
         int exec_rc;
 
-        // exec_rc = call_execl();
-        exec_rc = call_execle();
+        exec_rc = call_execl();
+        // exec_rc = call_execle();
         // exec_rc = call_execlp();
         // exec_rc = call_execv();
         // exec_rc = call_execvp();
