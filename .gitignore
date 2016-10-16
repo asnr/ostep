@@ -1,3 +1,8 @@
 *.DS_Store
-!*.c
+
 *
+
+# This rule is necessary because it is not possible to re-include a
+# file if a parent directory of that file is excluded.
+!/**/
+!*.c
