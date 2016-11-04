@@ -6,3 +6,4 @@
 # file if a parent directory of that file is excluded.
 !/**/
 !*.c
+!*.md
