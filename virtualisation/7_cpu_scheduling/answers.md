@@ -1,4 +1,3 @@
-
 ###### 1. Compute the response time and turnaround time when running three jobs of length 200 with the SJF and FIFO schedulers.
 
 Shortest Job First: avg response time 200, avg turnaround time 400.
