@@ -26,6 +26,17 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
+int
+getprocs(void)
+{
+  int numprocs = 0;
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if (p->state != UNUSED)
+      numprocs++;
+  return numprocs;
+}
+
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
