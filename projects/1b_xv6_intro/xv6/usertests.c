@@ -1737,6 +1737,107 @@ void argptest()
   printf(1, "arg test passed\n");
 }
 
+
+void getprocstest_block_on_read(char *from, int fd, int read_num)
+{
+  char msg = 'G';
+  int msg_len = 1;
+
+  if (read(fd, &msg, msg_len) != msg_len) {
+    printf(1, "getprocstest: read() #%d from %s failed\n", read_num, from);
+    exit();
+  }
+}
+
+void getprocstest_write_release(char *to, int fd, int write_num)
+{
+  char msg = 'G';
+  int msg_len = 1;
+
+  if (write(fd, &msg, msg_len) != msg_len) {
+    printf(1, "getprocstest: write() #%d to %s failed\n", write_num, to);
+    exit();
+  }
+}
+
+void getprocstest()
+{
+  // This test has race conditions! If this process is
+  // interrupted midway through and another process is created or
+  // dies then this will fail even if getprocs() is correct.
+  int numprocs_start = getprocs();
+  int numprocs_fst_child, numprocs_snd_child;
+
+  int root_read_fds[2], fst_child_fds[2], snd_child_fds[2];
+  if (pipe(root_read_fds) != 0 ||
+      pipe(fst_child_fds) != 0 || pipe(snd_child_fds) != 0) {
+    printf(1, "pipe() failed\n");
+    exit();
+  }
+
+  
+  int forkrc = fork();
+  if (forkrc > 0) {
+    close(root_read_fds[1]);
+    close(fst_child_fds[0]);
+    close(snd_child_fds[0]);
+
+    numprocs_fst_child = getprocs();
+    
+    getprocstest_write_release("first child", fst_child_fds[1], 1);
+
+    getprocstest_block_on_read("first child", root_read_fds[0], 1);
+
+    numprocs_snd_child = getprocs();
+    
+    getprocstest_write_release("second child", snd_child_fds[1], 1);
+    getprocstest_write_release("first child", fst_child_fds[1], 2);
+
+    wait();
+
+    close(fst_child_fds[1]);
+    close(snd_child_fds[1]);
+
+  } else if (forkrc == 0) {
+    close(root_read_fds[0]);
+    close(fst_child_fds[1]);
+    close(snd_child_fds[1]);
+
+    getprocstest_block_on_read("root", fst_child_fds[0], 1);
+    
+    int forkrc2 = fork();
+    if (forkrc2 > 0) {
+      getprocstest_block_on_read("root", fst_child_fds[0], 2);
+      wait();
+      exit();
+    } else if (forkrc2 == 0) {
+      getprocstest_write_release("root", root_read_fds[1], 1);
+      getprocstest_block_on_read("root", snd_child_fds[0], 1);
+      exit();
+    } else {
+      printf(1, "getprocstest: second fork() failed\n");
+      exit();
+    }
+  } else {
+    printf(2, "getprocstest: fork() failed\n");
+    exit();
+  }
+
+  if (numprocs_fst_child != numprocs_start + 1) {
+    printf(1, "getprocstest failed: numprocs_start %d, numprocs_fst_child %d\n",
+           numprocs_start, numprocs_fst_child);
+    exit();
+  }
+
+  if (numprocs_snd_child != numprocs_fst_child + 1) {
+    printf(1, "getprocstest failed: numprocs_fst_child %d, numprocs_snd_child %d\n",
+           numprocs_fst_child, numprocs_snd_child);
+    exit();
+  }
+
+  printf(1, "getprocs test passed\n");
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1755,6 +1856,8 @@ main(int argc, char *argv[])
     exit();
   }
   close(open("usertests.ran", O_CREATE));
+
+  getprocstest();
 
   argptest();
   createdelete();
