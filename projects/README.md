@@ -10,8 +10,10 @@ export PATH=/usr/local/xv6/bin:$PATH
 and then, after changing the working directory to the xv6 root,
 
 ```sh
-make clean && make qemu
+make clean && make qemu-nox
 ```
+
+(`qemu-nox` avoids the use of X windows and is generally fast and easy; to quit, type control-a followed by x; to see the other commands available, type control-a followed by an h).
 
 
 Building xv6 on macOS

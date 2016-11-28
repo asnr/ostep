@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#include "pstat.h"
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -24,6 +26,37 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+}
+
+static __inline__ unsigned long getCC(void)
+{
+  unsigned long lo, hi; 
+  asm volatile("rdtsc" : "=a" (lo), "=d" (hi)); 
+  return lo;
+}
+
+int
+getpinfo(struct pstat *stats)
+{
+  int pidx;
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  
+  for (pidx = 0; pidx < NPROC; pidx++) {
+    p = (ptable.proc + pidx);
+    stats->inuse[pidx] = p->state == UNUSED ? 0 : 1;
+    stats->pid[pidx] = p->pid;
+    stats->hticks[pidx] = p->hticks;
+    stats->lticks[pidx] = p->lticks;
+    if (p->state == RUNNING) {
+      stats->lticks[pidx] += (int) (getCC() - p->schedcc);
+    }
+  }
+
+  release(&ptable.lock);
+
+  return 0;
 }
 
 int
@@ -62,6 +95,9 @@ found:
   p->pid = nextpid++;
 
   release(&ptable.lock);
+
+  p->lticks = 0;
+  p->hticks = 0;
 
   // Allocate kernel stack.
   if((p->kstack = kalloc()) == 0){
@@ -291,6 +327,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  unsigned long unschedcc;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -302,14 +339,21 @@ scheduler(void)
       if(p->state != RUNNABLE)
         continue;
 
+      // Choose the process that will be scheduled
+      proc = p;
+
+      proc->schedcc = getCC();
+
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      proc = p;
       switchuvm(p);
       p->state = RUNNING;
       swtch(&cpu->scheduler, p->context);
       switchkvm();
+
+      unschedcc = getCC();
+      p->lticks += (int) (unschedcc - (proc->schedcc));
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.

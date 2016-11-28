@@ -7,6 +7,8 @@
 #include "mmu.h"
 #include "proc.h"
 
+#include "pstat.h"
+
 int
 sys_fork(void)
 {
@@ -94,4 +96,15 @@ int
 sys_getprocs(void)
 {
   return getprocs();
+}
+
+int
+sys_getpinfo(void)
+{
+  struct pstat *st;
+
+  if (argptr(0, (void*)&st, sizeof(*st)) < 0) {
+    return -1;
+  }
+  return getpinfo(st);
 }
