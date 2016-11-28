@@ -28,7 +28,7 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
-static __inline__ unsigned long getCC(void)
+static __inline__ unsigned long getticks(void)
 {
   unsigned long lo, hi; 
   asm volatile("rdtsc" : "=a" (lo), "=d" (hi)); 
@@ -36,21 +36,51 @@ static __inline__ unsigned long getCC(void)
 }
 
 int
+setpri(int num) {
+  if (!(num == 1 || num == 2)) {
+    return -1;
+  }
+  if (proc->priority == num) {
+    return 0;
+  }
+
+  unsigned long ticks = getticks();
+  int ticks_this_sched = (int) (ticks - proc->schedticks);
+  if (proc->priority == 1) {
+    proc->lticks += ticks_this_sched;
+  } else if (proc->priority == 2) {
+    proc->hticks += ticks_this_sched;
+  }
+  proc->schedticks = ticks;
+
+  proc->priority = num;
+
+  return 0;
+}
+
+int
 getpinfo(struct pstat *stats)
 {
   int pidx;
+  int ticks_this_sched;
   struct proc *p;
 
   acquire(&ptable.lock);
   
   for (pidx = 0; pidx < NPROC; pidx++) {
-    p = (ptable.proc + pidx);
+    p = ptable.proc + pidx;
     stats->inuse[pidx] = p->state == UNUSED ? 0 : 1;
     stats->pid[pidx] = p->pid;
+
     stats->hticks[pidx] = p->hticks;
     stats->lticks[pidx] = p->lticks;
     if (p->state == RUNNING) {
-      stats->lticks[pidx] += (int) (getCC() - p->schedcc);
+      ticks_this_sched = (int) (getticks() - p->schedticks);
+      if (p->priority == 1) {
+        stats->lticks[pidx] += ticks_this_sched;
+      } else if (p->priority == 2) {
+        stats->hticks[pidx] += ticks_this_sched;
+      }
     }
   }
 
@@ -65,7 +95,7 @@ getprocs(void)
   int numprocs = 0;
   struct proc *p;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if (p->state != UNUSED)
+    if(p->state != UNUSED)
       numprocs++;
   return numprocs;
 }
@@ -96,6 +126,7 @@ found:
 
   release(&ptable.lock);
 
+  p->priority = 1;
   p->lticks = 0;
   p->hticks = 0;
 
@@ -327,7 +358,8 @@ void
 scheduler(void)
 {
   struct proc *p;
-  unsigned long unschedcc;
+  struct proc *plow = 0;
+  int elapsedticks;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -338,11 +370,17 @@ scheduler(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
+      if(p->priority == 1 && plow == 0) {
+        plow = p;
+        continue;
+      }
+      if(p->priority == 1 && p != plow)
+        continue;
 
       // Choose the process that will be scheduled
       proc = p;
 
-      proc->schedcc = getCC();
+      p->schedticks = getticks();
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -352,12 +390,18 @@ scheduler(void)
       swtch(&cpu->scheduler, p->context);
       switchkvm();
 
-      unschedcc = getCC();
-      p->lticks += (int) (unschedcc - (proc->schedcc));
+      elapsedticks = (int) (getticks() - (p->schedticks));
+      if (p->priority == 1) {
+        p->lticks += elapsedticks;
+      } else if (p->priority == 2) {
+        p->hticks += elapsedticks;
+      }
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
+
+      plow = 0;
     }
     release(&ptable.lock);
 

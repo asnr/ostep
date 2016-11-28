@@ -64,9 +64,10 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   // New state:
+  int priority;                // Scheduling priority, either 1 or 2. 2 runs first.
   int hticks; // the number of ticks process has accumulated at priority 2
   int lticks; // the number of ticks process has accumulated at priority 1
-  unsigned long schedcc;       // Cycle count when process last scheduled
+  unsigned long schedticks;    // Cycle count when process last scheduled
 };
 
 // Process memory is laid out contiguously, low addresses first:

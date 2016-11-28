@@ -8,6 +8,8 @@
 #include "traps.h"
 #include "memlayout.h"
 
+#include "pstat.h"
+
 char buf[8192];
 char name[3];
 char *echoargv[] = { "echo", "ALL", "TESTS", "PASSED", 0 };
@@ -1838,6 +1840,92 @@ void getprocstest()
   printf(1, "getprocs test passed\n");
 }
 
+void getpinfo_exit_on_fail(struct pstat *st, int callnum)
+{
+  if (getpinfo(st) < 0) {
+    printf(1, "setpriandinfotest: getpinfo() call %d failed\n", callnum);
+    exit();
+  }
+}
+
+void setpri_exit_on_fail(int pri, int callnum) {
+  if (setpri(pri) < 0) {
+    printf(1, "setpriandinfotest: setrpri() call %d failed\n", callnum);
+    exit();
+  }
+}
+
+void setpriandinfotest()
+{
+  // This is super hacky but at this stage, meh
+  struct pstat st;
+  getpinfo_exit_on_fail(&st, 1);
+
+  int pidx;
+  for (pidx = 0; pidx < NPROC; pidx++) {
+    if (st.inuse[pidx] && st.hticks[pidx] > 0) {
+      printf(1, "setpriandinfotest: hticks when no proc at priority 2\n");
+      exit();
+    }
+  }
+
+  setpri_exit_on_fail(2, 1);
+  getpinfo_exit_on_fail(&st, 2);
+
+  int this_pidx = -1;
+  int hticks1 = 0;
+  int lticks1 = 0;
+  for (pidx = 0; pidx < NPROC; pidx++) {
+    if (st.inuse[pidx] && st.hticks[pidx] > 0) {
+      if (this_pidx < 0) {
+        this_pidx = pidx;
+        hticks1 = st.hticks[pidx];
+        lticks1 = st.lticks[pidx];
+      } else {
+        printf(1, "setpriandinfotest: more than one proc with hticks > 0\n");
+        exit();
+      }
+    }
+  }
+
+  if (this_pidx < 0) {
+    printf(1, "setpriandinfotest: no proc with hticks > 0\n");
+    exit();
+  }
+
+  getpinfo_exit_on_fail(&st, 3);
+  int hticks2 = st.hticks[this_pidx];
+  int lticks2 = st.lticks[this_pidx];
+  if (hticks2 <= hticks1) {
+    printf(1, "setpriandinfotest: hticks did not advance\n",
+           hticks1, hticks2, lticks1, lticks2);
+    exit();
+  }
+  if (lticks2 > lticks1) {
+    printf(1, "setpriandinfotest: lticks advanced\n");
+    exit();
+  }
+
+  setpri_exit_on_fail(1, 2);
+  getpinfo_exit_on_fail(&st, 4);
+  int hticks3 = st.hticks[this_pidx];
+  int lticks3 = st.lticks[this_pidx];
+
+  getpinfo_exit_on_fail(&st, 5);
+  int hticks4 = st.hticks[this_pidx];
+  int lticks4 = st.lticks[this_pidx];  
+  if (hticks4 > hticks3) {
+    printf(1, "setpriandinfotest: hticks advanced\n");
+    exit();
+  }
+  if (lticks4 <= lticks3) {
+    printf(1, "setpriandinfotest: lticks did not advanced\n");
+    exit();
+  }
+
+  printf(1, "setpri and getpinfo test passed\n");
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1857,6 +1945,7 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
+  setpriandinfotest();
   getprocstest();
 
   argptest();
