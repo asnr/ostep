@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 
 
 static const char ERROR_MSG[] = "An error has occurred\n";
 static const char PROMPT[] = "whoosh> ";
+static const char REDIRECT[] = ">";
 static const char ARG_DELIM[] = " \t";  // command line delimiters
 static const int MAX_LINE_LEN = 128;
 
@@ -38,6 +40,8 @@ void error_and_exit()
     print_error();
     exit(1);
 }
+
+
 
 void alloc_str_array(char *strs[], int str_len, int num_strs);
 int read_input_line(char *buf, int max_line_len);
@@ -72,9 +76,7 @@ int main(int argc, char const *argv[])
 
         runcmd(tokens, numtokens, &path);
 
-        printf("%s\n", input);
-        print_tokens(tokens, numtokens);
-
+        // print_tokens(tokens, numtokens);
     }
 
     free_path(&path);
@@ -190,9 +192,130 @@ void setpath(char *tokens[], int numtokens, path_t *path)
     path->size = numtokens - 1;
 }
 
+// Returns -1 if encounters a redirection error, 0 otherwise
+int getredirect(char *tokens[], int numtokens,
+                int *numcmdtokens, int *redirect_to_last_token)
+{
+    // The following commands should be rejected (return -1):
+    //   $ ls >
+    //   $ ls > out1 out2
+    //   $ ls > out1 out2 out3
+    //   $ ls > out1 > out2
+
+    for (int tidx = 0; tidx < numtokens; tidx++) {
+        if (strncmp(tokens[tidx], REDIRECT, sizeof(REDIRECT)) == 0 &&
+            tidx != numtokens - 2) {
+            return -1;
+        }
+    }
+
+    if (numtokens > 2 &&
+        strncmp(tokens[numtokens - 2], REDIRECT, sizeof(REDIRECT)) == 0) {
+        *numcmdtokens = numtokens - 2;
+        *redirect_to_last_token = 1;
+    } else {
+        *numcmdtokens = numtokens;
+        *redirect_to_last_token = 0;
+    }
+
+    return 0;
+}
+
+// dircapacity is inclusive of terminating NUL character.
+void buildpath(char *dir, char *file, int dircapacity)
+{
+    int dirlen = strlen(dir);
+    if (dirlen > 0 && *(dir + dirlen - 1) != '/') {
+        if (strlcat(dir, "/", dircapacity) >= dircapacity) {
+            error_and_exit();
+        }
+    }
+
+    if (strlcat(dir, file, dircapacity) >= dircapacity) {
+        error_and_exit();
+    }
+}
+
+int getcmdpath(char *cmd, path_t *path, char *dst, size_t dstsize)
+{
+    int foundpath = 0;
+    char currpath[dstsize];
+    for (int pidx = 0; pidx < path->size; pidx++) {
+        if (strlcpy(currpath, path->pathdirs[pidx], dstsize) >= dstsize) {
+            error_and_exit();
+        }
+        buildpath(currpath, cmd, dstsize);
+
+        struct stat st;
+        int statrc = stat(currpath, &st);
+        if (statrc == 0) {
+            foundpath = 1;
+            break;
+        }
+    }
+
+    if (foundpath) {
+        if (strlcpy(dst, currpath, dstsize) >= dstsize) {
+            error_and_exit();
+        } 
+    }
+    return foundpath ? 0 : -1;
+}
+
+void print_argv(char *argv[])
+{
+    int idx = 0;
+    while (argv[idx] != NULL) {
+        printf("argv[%d]: \"%s\"\n", idx, argv[idx]);
+        idx++;
+    }
+}
+
 void runprog(char *tokens[], int numtokens, path_t *path)
 {
+    int numcmdtokens, redirect_to_last_token;
+    int redirect_rc = getredirect(tokens, numtokens,
+                                  &numcmdtokens, &redirect_to_last_token);
+    if (redirect_rc == -1) {
+        print_error();
+        return;
+    }
 
+    char *cmd = tokens[0];
+    int cmdpath_sz = MAXPATHLEN + 1;
+    char cmdpath[cmdpath_sz];
+    int getcmdpath_rc = getcmdpath(cmd, path, cmdpath, cmdpath_sz);
+    if (getcmdpath_rc == -1) {
+        print_error();
+        return;
+    }
+
+    int argv_sz = numcmdtokens + 1;
+    char *argv[argv_sz];
+    int argv_str_cap = MAX_LINE_LEN + 1;
+    alloc_str_array(argv, argv_str_cap, argv_sz);
+
+    strlcpy(argv[0], cmdpath, argv_str_cap);
+    for (int tidx = 1; tidx < numcmdtokens; tidx++) {
+        strlcpy(argv[tidx], tokens[tidx], argv_str_cap);
+    }
+    // Bookending NULL ptr
+    argv[numcmdtokens] = NULL;
+
+    print_argv(argv);
+
+    int forkrc = fork();
+    if (forkrc == 0) {
+        execv(cmdpath, argv);
+        print_error();
+    } else if (forkrc > 0) {
+        int stat_loc;
+        waitpid(forkrc, &stat_loc, 0);
+    } else {
+        print_error();
+    }
+
+    free_str_array(argv, argv_sz);
 }
 
 void runcmd(char *tokens[], int numtokens, path_t *path)
