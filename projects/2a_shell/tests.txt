@@ -1,0 +1,79 @@
+# Error (line too long)
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+# Quit whoosh
+exit
+
+# .../ostep/projects/2a_shell
+pwd
+
+# cd up (also spaces and tabs between tokens)
+ 	cd			..  	
+
+# pwd spaces (including tabs) at start and end
+  	  pwd    	
+
+# cd home
+		cd   	 
+
+# $HOME
+pwd
+
+# cd back
+cd .../ostep/projects/2a_shell
+
+# ls
+ls
+
+# Make $PATH empty
+path
+
+# Error ($PATH is empty, ls not found)
+ls
+
+# Fill $PATH (note one has trailing slash, the other doesn't)
+path /bin bin_the_first bin_the_second
+
+# Prep for later tests
+mkdir bin_the_first
+mkdir bin_the_second
+cp echo_test_for_whoosh.sh bin_the_first/echo_test_for_whoosh
+cp echo_test_for_whoosh.sh bin_the_second/echo_test_for_whoosh
+
+# bin_the_first/echo_test_for_whoosh.sh
+echo_test_for_whoosh
+
+# Prep for next test
+rm bin_the_first/echo_test_for_whoosh
+
+# bin_the_second/echo_test_for_whoosh.sh
+echo_test_for_whoosh
+
+# Clean up
+rm -rf bin_the_first bin_the_second
+path /bin
+
+# Error
+ls >
+
+# Error
+ls > out1 out2
+
+# Error
+ls > out1 out2 out3
+
+# Error
+ls > out1 > out2
+
+# Redirection
+echo hi there! > test_echo
+cat test_echo.out
+cat test_echo.err
+
+# Redirection stderr
+ls dir_that_doesnt_exist > test_ls
+cat test_ls.out
+cat test_ls.err
+
+# Clean up
+rm test_echo.out test_echo.err test_ls.out test_ls.err

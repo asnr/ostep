@@ -13,15 +13,6 @@ static const char REDIRECT[] = ">";
 static const char ARG_DELIM[] = " \t";  // command line delimiters
 static const int MAX_LINE_LEN = 128;
 
-#define RET_OK   0
-#define RET_ERR  1
-
-#define continue_on_error(errcode)  \
-    if (errcode == RET_ERR) {       \
-        print_error();              \
-        continue;                   \
-    }
-
 
 typedef struct pathdirlist {
     char *pathdirs[MAX_LINE_LEN];
@@ -30,6 +21,7 @@ typedef struct pathdirlist {
 
 void init_path(path_t *path);
 void free_path(path_t *path);
+
 
 void print_error()
 {
@@ -41,7 +33,6 @@ void error_and_exit()
     print_error();
     exit(1);
 }
-
 
 
 void alloc_str_array(char *strs[], int str_len, int num_strs);
@@ -71,13 +62,15 @@ int main(int argc, char const *argv[])
         printf("%s", PROMPT);
 
         int readrc = read_input_line(input, MAX_LINE_LEN);
-        continue_on_error(readrc)
+        if (readrc == -1) {
+            print_error();
+            continue;
+        }
 
         int numtokens = tokenise(input, MAX_LINE_LEN, tokens);
 
         runcmd(tokens, numtokens, &path);
 
-        // print_tokens(tokens, numtokens);
     }
 
     free_path(&path);
@@ -125,7 +118,7 @@ void read_and_discard_line()
 
 int read_input_line(char *buf, int max_line_len)
 {
-    int rc = RET_OK;
+    int rc = 0;
 
     char *ret = fgets(buf, max_line_len + 1, stdin);
     if (ret == NULL) {
@@ -139,7 +132,7 @@ int read_input_line(char *buf, int max_line_len)
     size_t input_len = strnlen(buf, max_line_len);
     if (input_len == max_line_len && buf[max_line_len - 1] != '\n') {
         read_and_discard_line();
-        rc = RET_ERR;
+        rc = -1;
     } else {
         buf[input_len - 1] = '\0';  // ovewrite trailing newline
     }
