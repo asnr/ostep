@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 
 
 static const char ERROR_MSG[] = "An error has occurred\n";
@@ -194,7 +195,8 @@ void setpath(char *tokens[], int numtokens, path_t *path)
 
 // Returns -1 if encounters a redirection error, 0 otherwise
 int getredirect(char *tokens[], int numtokens,
-                int *numcmdtokens, int *redirect_to_last_token)
+                int *numcmdtokens, int *redirect_output,
+                char *outfile, char *errfile, size_t file_szs)
 {
     // The following commands should be rejected (return -1):
     //   $ ls >
@@ -209,16 +211,29 @@ int getredirect(char *tokens[], int numtokens,
         }
     }
 
+    int return_code = 0;
+
     if (numtokens > 2 &&
         strncmp(tokens[numtokens - 2], REDIRECT, sizeof(REDIRECT)) == 0) {
+
         *numcmdtokens = numtokens - 2;
-        *redirect_to_last_token = 1;
+        *redirect_output = 1;
+        
+        char *redirect_base = tokens[numtokens - 1];
+        if (strlcpy(outfile, redirect_base, file_szs) >= file_szs ||
+            strlcat(outfile, ".out", file_szs) >= file_szs ||
+            strlcpy(errfile, redirect_base, file_szs) >= file_szs ||
+            strlcat(errfile, ".err", file_szs) >= file_szs) {
+
+            return_code = -1;
+        }
+
     } else {
         *numcmdtokens = numtokens;
-        *redirect_to_last_token = 0;
+        *redirect_output = 0;
     }
 
-    return 0;
+    return return_code;
 }
 
 // dircapacity is inclusive of terminating NUL character.
@@ -271,11 +286,43 @@ void print_argv(char *argv[])
     }
 }
 
+// Returns -1 on error, 0 on success
+int redirect_out_and_err(char *outfile, char *errfile, int *stderr_fd)
+{
+    *stderr_fd = STDERR_FILENO;
+
+    int backup_stderr = dup(STDERR_FILENO);
+    if (backup_stderr == -1) {
+        return -1;
+    }
+    *stderr_fd = backup_stderr;
+
+
+    int oflag = O_WRONLY | O_CREAT | O_TRUNC;
+    int sflag = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+
+    close(STDOUT_FILENO);
+    if (open(outfile, oflag, sflag) == -1) {
+        return -1;
+    }
+
+    close(STDERR_FILENO);
+    if (open(errfile, oflag, sflag) == -1) {
+        close(STDOUT_FILENO);
+        return -1;
+    }
+
+    return 0;
+}
+
 void runprog(char *tokens[], int numtokens, path_t *path)
 {
-    int numcmdtokens, redirect_to_last_token;
+    int numcmdtokens, redirect_output;
+    int file_szs = MAX_LINE_LEN;
+    char outfile[file_szs], errfile[file_szs];
     int redirect_rc = getredirect(tokens, numtokens,
-                                  &numcmdtokens, &redirect_to_last_token);
+                                  &numcmdtokens, &redirect_output,
+                                  outfile, errfile, file_szs);
     if (redirect_rc == -1) {
         print_error();
         return;
@@ -302,12 +349,19 @@ void runprog(char *tokens[], int numtokens, path_t *path)
     // Bookending NULL ptr
     argv[numcmdtokens] = NULL;
 
-    print_argv(argv);
-
     int forkrc = fork();
     if (forkrc == 0) {
+        if (redirect_output) {
+            int stderr_fd;
+            int outerr_rc = redirect_out_and_err(outfile, errfile, &stderr_fd);
+            if (outerr_rc == -1) {
+                dprintf(stderr_fd, "%s", ERROR_MSG);
+                exit(1);
+            }
+        }
         execv(cmdpath, argv);
         print_error();
+        exit(1);
     } else if (forkrc > 0) {
         int stat_loc;
         waitpid(forkrc, &stat_loc, 0);
