@@ -77,3 +77,6 @@ cat test_ls.err
 
 # Clean up
 rm test_echo.out test_echo.err test_ls.out test_ls.err
+
+# Error
+echo uhoh > dir_that_doesnt_exist/foo
