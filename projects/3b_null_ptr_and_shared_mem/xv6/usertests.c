@@ -1760,7 +1760,8 @@ void getprocstest_write_release(char *to, int fd, int write_num)
   }
 }
 
-void getprocstest()
+void
+getprocstest()
 {
   // This test has race conditions! If this process is
   // interrupted midway through and another process is created or
@@ -1819,7 +1820,7 @@ void getprocstest()
       exit();
     }
   } else {
-    printf(2, "getprocstest: fork() failed\n");
+    printf(1, "getprocstest: fork() failed\n");
     exit();
   }
 
@@ -1836,6 +1837,29 @@ void getprocstest()
   }
 
   printf(1, "getprocs test passed\n");
+}
+
+void
+deref_null_ptr_test()
+{
+  int parentpid = getpid();
+
+  int forkrc = fork();
+  if (forkrc < 0) {
+    printf(1, "deref_null_ptr_test: fork() failed\n");
+    exit();
+  } else if (forkrc == 0) {
+    int *x = 0;
+    int y = *x;
+    printf(1,
+      "deref_null_ptr_test failed: dereferenced null ptr, val at 0: %d\n", y);
+    kill(parentpid);
+    exit();
+  } else {
+    wait();
+  }
+
+  printf(1, "deref_null_ptr_test passed\n");
 }
 
 unsigned long randstate = 1;
@@ -1856,6 +1880,8 @@ main(int argc, char *argv[])
     exit();
   }
   close(open("usertests.ran", O_CREATE));
+
+  deref_null_ptr_test();
 
   getprocstest();
 
