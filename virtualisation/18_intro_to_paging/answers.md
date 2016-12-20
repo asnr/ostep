@@ -58,4 +58,4 @@ The first parameters are unrealistic because each page table would have to hold 
 
 The second set of parameters, while not impossible (each page table entry would have to hold 4 PTE's, and each PTE would have to be at least 7bits in size, easily fitting into a 32k address space), would only result in 4 pages per process. This risks wasting a lot of space due to internal fragmentation.
 
-The third set of parameters are not as unrealistic as the first two: each page table would be composed of 256 entries and each entry would need to address one of 2^9 physical pages, yielding a minimum size for a flat page table of around 2k bits..
+The third set of parameters are not as unrealistic as the first two: each page table would be composed of 256 entries and each entry would need to address one of 2^9 physical pages, yielding a minimum size for a flat page table of around 2k bits.
