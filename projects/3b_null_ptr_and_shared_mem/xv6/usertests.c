@@ -1862,6 +1862,31 @@ deref_null_ptr_test()
   printf(1, "deref_null_ptr_test passed\n");
 }
 
+void
+bad_ptr_to_syscall_test()
+{
+  int parentpid = getpid();
+
+  int forkrc = fork();
+  if (forkrc < 0) {
+    printf(1, "bad_ptr_to_syscall_test: fork() failed.\n");
+    exit();
+  } else if (forkrc == 0) {
+    int *illegalptr = (int*) 2;
+    int piperc = pipe(illegalptr);
+    if (piperc != -1) {
+      printf(1,
+             "bad_ptr_to_syscall_test failed: syscall accepted invalid ptr.\n");
+      kill(parentpid);
+    }
+    exit();
+  } else {
+    wait();
+  }
+
+  printf(1, "bad_ptr_to_syscall_test passed\n");
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1881,6 +1906,7 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
+  bad_ptr_to_syscall_test();
   deref_null_ptr_test();
 
   getprocstest();
