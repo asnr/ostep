@@ -13,6 +13,8 @@ char name[3];
 char *echoargv[] = { "echo", "ALL", "TESTS", "PASSED", 0 };
 int stdout = 1;
 
+const int NOKILL = -1;
+
 // does chdir() call iput(p->cwd) in a transaction?
 void
 iputtest(void)
@@ -1887,6 +1889,304 @@ bad_ptr_to_syscall_test()
   printf(1, "bad_ptr_to_syscall_test passed\n");
 }
 
+void exit_on_shmem_access_fail(void *retval, int arg,
+                               const char *testname, int killpid)
+{
+  if (retval == 0) {
+    printf(1, "%s error: shmem_access(%d) failed.\n", testname, arg);
+    if (killpid >= 0) {
+      kill(killpid);
+    }
+    exit();
+  }
+}
+
+void block_until_read(char *from, int fd, const char *testname,
+                        int read_num, int killpid)
+{
+  char msg;
+  int msg_len = 1;
+
+  if (read(fd, &msg, msg_len) != msg_len) {
+    printf(1, "%s: read() #%d from %s failed\n", testname, read_num, from);
+    if (killpid >= 0) {
+      kill(killpid);
+    }
+    exit();
+  }
+}
+
+void write_release(char *to, int fd, const char *testname,
+                        int write_num, int killpid)
+{
+  char msg = '>';
+  int msg_len = 1;
+
+  if (write(fd, &msg, msg_len) != msg_len) {
+    printf(1, "%s: write() #%d to %s failed\n", testname, write_num, to);
+    if (killpid >= 0) {
+      kill(killpid);
+    }
+    exit();
+  }
+}
+
+const int SHAREDMEM_FSTOFFSET = 0;
+const int SHAREDMEM_SNDOFFSET = 4095;
+const char SHAREDMEM_FSTVAL = '!';
+const char SHAREDMEM_SNDVAL = 'Z';
+
+void
+parent_mem_access_asserts(int readfd, int writefd, char *shared_pg,
+                          int childpid, const char *testname)
+{
+  // wait on child
+  char buf;
+  read(readfd, &buf, 1);
+
+  char fstval = *(shared_pg + SHAREDMEM_FSTOFFSET);
+  if (fstval != SHAREDMEM_FSTVAL) {
+    printf(1, "%s failed: parent read value %c from shared memory.\n",
+           testname, fstval);
+    kill(childpid);
+    exit();
+  }
+  
+  *(shared_pg + SHAREDMEM_SNDOFFSET) = SHAREDMEM_SNDVAL;
+  
+  // release child
+  buf = '>';
+  write(writefd, &buf, 1);
+}
+
+void
+child_mem_access_asserts(int readfd, int writefd, char *shared_pg,
+                         int parentpid, const char *testname)
+{
+  *(shared_pg + SHAREDMEM_FSTOFFSET) = SHAREDMEM_FSTVAL;
+
+  // release parent
+  char buf = '>';
+  write(writefd, &buf, 1);
+
+  // wait on parent
+  read(readfd, &buf, 1);
+
+  char sndval = *(shared_pg + SHAREDMEM_SNDOFFSET);
+  if (sndval != SHAREDMEM_SNDVAL) {
+    printf(1, "%s failed: child read value %c from shared memory.\n",
+           testname, sndval);
+    kill(parentpid);
+    exit();
+  }
+}
+
+void exit_if_pipe_failed(int piperc)
+{
+  if (piperc == -1) {
+    printf(1, "Error: pipe() failed.\n");
+    exit();    
+  }
+}
+
+void
+shmem_access_fork_inherit_test()
+{
+  const char testname[] = "shmem_access_fork_inherit_test";
+
+  int childreadpipe[2];
+  int piperc1 = pipe(childreadpipe);
+  exit_if_pipe_failed(piperc1);
+
+  int childwritepipe[2];
+  int piperc2 = pipe(childwritepipe);
+  exit_if_pipe_failed(piperc2);
+
+  const int SHARED_PG_NUM = 0;
+
+  void *shared_pg = shmem_access(SHARED_PG_NUM);
+  exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, NOKILL);
+
+  int parentpid = getpid();
+
+  int forkrc = fork();
+  if (forkrc == 0) {
+    close(childreadpipe[1]);
+    close(childwritepipe[0]);
+
+    child_mem_access_asserts(childreadpipe[0], childwritepipe[1],
+                             (char *)shared_pg, parentpid,
+                             testname);
+    exit();
+
+  } else if (forkrc > 0) {
+    close(childreadpipe[0]);
+    close(childwritepipe[1]);
+
+    parent_mem_access_asserts(childwritepipe[0], childreadpipe[1],
+                              (char *)shared_pg, forkrc,
+                              testname);
+    wait();
+  } else {
+    printf(1, "Error: fork() failed.\n");
+    exit();
+  }
+
+  printf(1, "shmem_access_fork_inherit_test passed\n");
+}
+
+void
+shmem_access_after_fork_test()
+{
+  const char testname[] = "shmem_access_separate_access_test";
+
+  int childreadpipe[2];
+  int piperc1 = pipe(childreadpipe);
+  exit_if_pipe_failed(piperc1);
+
+  int childwritepipe[2];
+  int piperc2 = pipe(childwritepipe);
+  exit_if_pipe_failed(piperc2);
+
+  const int SHARED_PG_NUM = 3;
+
+  int parentpid = getpid();
+
+  int forkrc = fork();
+  if (forkrc == 0) {
+    close(childreadpipe[1]);
+    close(childwritepipe[0]);
+
+    void *shared_pg = shmem_access(SHARED_PG_NUM);
+    exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, parentpid);
+
+    child_mem_access_asserts(childreadpipe[0], childwritepipe[1],
+                             (char *)shared_pg, parentpid,
+                             "shmem_access_separate_access_test");
+    exit();
+
+  } else if (forkrc > 0) {
+    close(childreadpipe[0]);
+    close(childwritepipe[1]);
+
+    void *shared_pg = shmem_access(SHARED_PG_NUM);
+    exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, forkrc);
+
+    parent_mem_access_asserts(childwritepipe[0], childreadpipe[1],
+                              (char *)shared_pg, forkrc,
+                              "shmem_access_separate_access_test");
+    wait();
+
+  } else {
+    printf(1, "Error: fork() failed.\n");
+    exit();
+  }
+
+  printf(1, "shmem_access_separate_access_test passed\n");
+}
+
+
+void
+assert_shmem_count_eq(int expected, int actual, const char* testname, int killpid)
+{
+  if (actual != expected) {
+    printf(1, "%s failed: expected shmem_count to return %d, got %d.\n",
+           expected, actual);
+    if (killpid >= 0) {
+      kill(killpid);
+    }
+    exit();
+  }
+}
+
+void
+shmem_count_test()
+{
+  const char testname[]  = "shmem_count_test";
+
+  int childreadpipe[2];
+  int piperc1 = pipe(childreadpipe);
+  exit_if_pipe_failed(piperc1);
+
+  int childwritepipe[2];
+  int piperc2 = pipe(childwritepipe);
+  exit_if_pipe_failed(piperc2);
+
+  const int SHARED_PG_NUM_1 = 0;
+  const int SHARED_PG_NUM_2 = 3;
+  
+  assert_shmem_count_eq(0, shmem_count(SHARED_PG_NUM_1),
+                        testname, NOKILL);
+
+  void *shared_pg_1 = shmem_access(SHARED_PG_NUM_1);
+  exit_on_shmem_access_fail(shared_pg_1, SHARED_PG_NUM_1,
+                            testname, NOKILL);
+
+  assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_1),
+                        testname, NOKILL);
+
+  int parentpid = getpid();
+  int forkrc = fork();
+  if (forkrc == 0) {
+    close(childreadpipe[1]);
+    close(childwritepipe[0]);
+
+    assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_1),
+                          testname, parentpid);
+
+    void *shared_pg_2 = shmem_access(SHARED_PG_NUM_2);
+    exit_on_shmem_access_fail(shared_pg_2, SHARED_PG_NUM_2,
+                              testname, parentpid);
+
+    assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_2),
+                          testname, parentpid);
+
+    block_until_read("parent", childreadpipe[0], testname, 0, parentpid);
+
+    write_release("parent", childwritepipe[1], testname, 0, parentpid);
+
+    assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_2),
+                          testname, parentpid);
+
+    exit();
+
+  } else if (forkrc > 0) {
+    int childpid = forkrc;
+    close(childreadpipe[0]);
+    close(childwritepipe[1]);
+
+    assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_1),
+                          testname, childpid);
+
+    block_until_read("child", childwritepipe[0], testname, 0, childpid);
+
+    assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_2),
+                          testname, childpid);
+
+    void *shared_pg_2 = shmem_access(SHARED_PG_NUM_2);
+    exit_on_shmem_access_fail(shared_pg_2, SHARED_PG_NUM_2, testname, childpid);
+
+    assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_2),
+                          testname, childpid);
+
+    write_release("child", childreadpipe[1], testname, 0, childpid);
+
+    wait();
+
+  } else {
+    printf(1, "%s error: fork() failed.\n", testname);
+    exit();
+  }
+
+  assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_1),
+                        testname, NOKILL);
+  assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_2),
+                        testname, NOKILL);
+
+  printf(1, "%s passed\n", testname);
+}
+
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1905,6 +2205,10 @@ main(int argc, char *argv[])
     exit();
   }
   close(open("usertests.ran", O_CREATE));
+
+  // shmem_access_fork_inherit_test();
+  // shmem_access_after_fork_test();
+  // shmem_count_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

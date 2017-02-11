@@ -100,6 +100,8 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_getprocs(void);
+extern int sys_shmem_access(void);
+extern int sys_shmem_count(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -124,6 +126,8 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_getprocs]  sys_getprocs,
+[SYS_shmem_access] sys_shmem_access,
+[SYS_shmem_count]  sys_shmem_count,
 };
 
 void

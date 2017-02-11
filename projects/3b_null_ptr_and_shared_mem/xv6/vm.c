@@ -10,6 +10,108 @@
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
+/*
+Do I reserve virtual pages for sharing, or allocate dynamically?
+What happens if we run out of memory--physical or virtual?
+
+Can we try grabbing the 'next free' virtual page? This 'next free' page
+must come from the heap, because the stack has a fixed size (one page).
+The heap grows upwards, so the 'next free' virtual page will be the next
+full page above proc->sz. Grabbing this page to serve shmem_access will
+be very awkward because it will split the heap into chunks. The
+bookkeeping for these chunks will seriously complicate the growproc()
+code, for example. It will also preclude a certain style of user code
+(namely, any code that assumes the heap is a contiguous chunk of
+virtual memory). Another (*very*) minor complaint is that it will
+introduce a miniscule amount of fragmentation: the last page before a
+shared page might not be fully used, introducing waste.
+
+This is not appealing. Instead, we will reserve a fixed set of four
+pages of virtual memory in a part of a process' virtual memory that is
+convenient. We could choose these four pages to be the last four before
+KERNBASE (i.e. the highest address pages controlled by the user), but
+this will mean that proc->sz will no longer both point to the top of
+the heap *and* measure the virtual space taken up by the process, i.e.
+the space that is not available to be allocated. There are several
+places in the codebase, however, that assume that all virtual
+addresses between the start of the binary and proc->sz are valid
+(copyuvm, the helper functions that grab arguments passed to syscalls).
+This assumption will be broken and the checks updated accordingly.
+
+So, we should reserve four pages of virtual memory, and they should be
+below the heap. We will put them immediately below the heap (i.e. just
+above the stack). This seems the least intrusive option.
+
+The next question is how do we allocate the physical pages? Allocating
+them dynamically seems a simple approach, but for the issue of
+parallelism: it is possible that processes running on different
+processors will execute the `shmem_access` kernel code at the same
+time, which would require us to protect the relevant kernel data
+structures with locks. Unfortunately, it's not clear how to implement
+the alternative, allocating the physical pages up front. I don't know
+how to set assigned page aligned space in the kernel binary (or if it's
+a good idea). Allocating space implicitly, say by adding a constant to
+memlayout.h is possible, but there doesn't seem to be a straightforward
+way of going about it. The first address after the kernel is loaded
+from the ELF file is in `end` in kalloc.c, but elsewhere (see the args
+to kinit1 and kinit2) 4MiB is used as the cutoff for kernel size. The
+final alternative I can think of, allocating the pages dynamically with
+`kalloc` while only the first processor is running may not be possible,
+as most physical memory is only initialised for allocating in `kinit2`,
+which is called after all processors have been started up.
+
+So we're going to allocate physical memory for sharing dynamically. The
+implementation won't use locks to begin with, which will leave it open
+to race conditions.
+
+On error return 0?
+*/
+
+
+//void* sharedpgs[] = { (void*) 0, (void*) 0, (void*) 0, (void*) 0 };
+
+void*
+shmem_access(int page_num)
+{
+  if (page_num < 0 || page_num >= MAX_NUM_SHARED_PGS) {
+    return 0;
+  }
+
+  void* ret = 0;
+
+  // Check if process has already mapped the shared page to their page table
+  // If so, just return it
+  // if (shared_page_already_mapped()) {
+
+  // } else {
+  //   // This if block is racy
+  //   if (!sharedpgs[page_num]) {
+  //     void* newpg = (void *) kalloc();
+  //     if (newpg == 0) {
+  //       return 0;
+  //     }
+  //     sharedpgs[page_num] = newpg;
+  //   }
+
+  //   // Map page to page table
+  //   procva = ;
+  //   procpgdir = ;
+  //   uint pa = V2P(sharedpgs[page_num]);
+  //   permissions = ?;
+  //   mappages(procpgdir, procva, PGSIZE, pa, permissions);
+
+  //   ret = procva;
+  // }
+  return ret;
+}
+
+int
+shmem_count(int page_num)
+{
+  return 0;
+}
+
+
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
 void

@@ -95,3 +95,25 @@ sys_getprocs(void)
 {
   return getprocs();
 }
+
+int
+sys_shmem_access(void)
+{
+  int page_num;
+
+  if(argint(0, &page_num) < 0)
+    return -1;
+
+  return (int) shmem_access(page_num);
+}
+
+int
+sys_shmem_count(void)
+{
+  int page_num;
+
+  if(argint(0, &page_num) < 0)
+    return -1;
+
+  return shmem_count(page_num);
+}

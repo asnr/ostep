@@ -168,6 +168,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+void*           shmem_access(int page_number);
+int             shmem_count(int page_number);
 void            seginit(void);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
