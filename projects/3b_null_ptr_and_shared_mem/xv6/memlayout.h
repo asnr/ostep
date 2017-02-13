@@ -14,5 +14,4 @@
 #define V2P_WO(x) ((x) - KERNBASE)    // same as V2P, but without casts
 #define P2V_WO(x) ((x) + KERNBASE)    // same as P2V, but without casts
 
-#define FST_VALID_ADDR 4096  // i.e. the start of the 2nd page
-#define MAX_NUM_SHARED_PGS 4
+#define FST_VALID_ADDR ((1 + NUM_SHAREABLE_PAGES)*PGSIZE)

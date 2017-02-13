@@ -73,7 +73,7 @@ On error return 0?
 void*
 shmem_access(int page_num)
 {
-  if (page_num < 0 || page_num >= MAX_NUM_SHARED_PGS) {
+  if (page_num < 0 || page_num >= NUM_SHAREABLE_PAGES) {
     return 0;
   }
 
