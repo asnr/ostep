@@ -37,8 +37,8 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  // Don't map the page before FST_VALID_ADDR at all.
-  sz = FST_VALID_ADDR;
+  // Don't map the pages before USER_BINARY at all.
+  sz = USER_BINARY;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;

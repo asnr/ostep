@@ -67,8 +67,9 @@ to race conditions.
 On error return 0?
 */
 
+void* ksharedpgs[] = { (void*) 0, (void*) 0, (void*) 0, (void*) 0 };
 
-//void* sharedpgs[] = { (void*) 0, (void*) 0, (void*) 0, (void*) 0 };
+static int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
 
 void*
 shmem_access(int page_num)
@@ -77,32 +78,23 @@ shmem_access(int page_num)
     return 0;
   }
 
-  void* ret = 0;
+  uint proc_va = page_num*PGSIZE + SHMEM_USER_ADDR;
 
-  // Check if process has already mapped the shared page to their page table
-  // If so, just return it
-  // if (shared_page_already_mapped()) {
+  if (has_unmapped_shmem(proc->pgdir, proc_va, 1)) {
+    // This `if` block is racy
+    if (!ksharedpgs[page_num]) {
+      void *newpg = (void *) kalloc();
+      if (newpg == 0) {
+        return 0;
+      }
+      ksharedpgs[page_num] = newpg;
+    }
 
-  // } else {
-  //   // This if block is racy
-  //   if (!sharedpgs[page_num]) {
-  //     void* newpg = (void *) kalloc();
-  //     if (newpg == 0) {
-  //       return 0;
-  //     }
-  //     sharedpgs[page_num] = newpg;
-  //   }
+    uint pa = V2P(ksharedpgs[page_num]);
+    mappages(proc->pgdir, (void *) proc_va, PGSIZE, pa, PTE_U | PTE_W);
+  }
 
-  //   // Map page to page table
-  //   procva = ;
-  //   procpgdir = ;
-  //   uint pa = V2P(sharedpgs[page_num]);
-  //   permissions = ?;
-  //   mappages(procpgdir, procva, PGSIZE, pa, permissions);
-
-  //   ret = procva;
-  // }
-  return ret;
+  return (void *) proc_va;
 }
 
 int
@@ -188,6 +180,46 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
     pa += PGSIZE;
   }
   return 0;
+}
+
+int
+has_unmapped_shmem(pde_t *pgdir, uint addr, uint sz)
+{
+  if (addr + sz <= SHMEM_USER_ADDR || USER_BINARY <= addr) {
+    return 0;
+  }
+
+  uint testaddr = addr < SHMEM_USER_ADDR ? SHMEM_USER_ADDR : PGROUNDDOWN(addr);
+  uint lastaddr = addr + sz - 1 >= USER_BINARY ? USER_BINARY - 1 : addr + sz - 1;
+  lastaddr = PGROUNDDOWN(lastaddr);
+
+  for (; testaddr <= lastaddr; testaddr += PGSIZE) {
+    pte_t *pte = walkpgdir(pgdir, (void *) testaddr, 0);
+    if (pte == 0 || !(*pte & PTE_P)) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+uint
+next_invalid_addr(pde_t *pgdir, uint procsz, uint addr)
+{
+  if (addr < SHMEM_USER_ADDR || addr > procsz) {
+    return addr;
+  }
+  if (USER_BINARY <= addr) {
+    return procsz;
+  }
+
+  uint testaddr;
+  for (testaddr = addr; testaddr < USER_BINARY; testaddr += PGSIZE) {
+    if (has_unmapped_shmem(pgdir, testaddr, 1)) {
+      return PGROUNDDOWN(testaddr);
+    }
+  }
+  return procsz;
 }
 
 // There is one page table per process, plus one that's used when
@@ -291,7 +323,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
     panic("inituvm: more than a page");
   mem = kalloc();
   memset(mem, 0, PGSIZE);
-  mappages(pgdir, (void*) FST_VALID_ADDR, PGSIZE, V2P(mem), PTE_W|PTE_U);
+  mappages(pgdir, (void*) USER_BINARY, PGSIZE, V2P(mem), PTE_W|PTE_U);
   memmove(mem, init, sz);
 }
 
@@ -390,7 +422,7 @@ freevm(pde_t *pgdir)
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, KERNBASE, 0);
+  deallocuvm(pgdir, KERNBASE, USER_BINARY);
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char * v = P2V(PTE_ADDR(pgdir[i]));
@@ -425,8 +457,17 @@ copyuvm(pde_t *pgdir, uint sz)
 
   if((d = setupkvm()) == 0)
     return 0;
-  // Note we leave pages before FST_VALID_ADDR unmapped
-  for(i = FST_VALID_ADDR; i < sz; i += PGSIZE){
+  for (i = SHMEM_USER_ADDR; i < USER_BINARY; i += PGSIZE) {
+    if (has_unmapped_shmem(pgdir, i, 1))
+      continue;
+    if ((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0)
+      goto bad;
+  }
+  for (i = USER_BINARY; i < sz; i += PGSIZE) {
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))

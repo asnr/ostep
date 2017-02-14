@@ -7,6 +7,7 @@
 #include "syscall.h"
 #include "traps.h"
 #include "memlayout.h"
+#include "mmu.h"
 
 char buf[8192];
 char name[3];
@@ -1937,10 +1938,10 @@ const char SHAREDMEM_FSTVAL = '!';
 const char SHAREDMEM_SNDVAL = 'Z';
 
 void
-parent_mem_access_asserts(int readfd, int writefd, char *shared_pg,
-                          int childpid, const char *testname)
+fst_proc_mem_access_asserts(int readfd, int writefd, char *shared_pg,
+                            int parentpid, const char *testname)
 {
-  // wait on child
+  // wait on snd proc
   char buf;
   read(readfd, &buf, 1);
 
@@ -1948,28 +1949,28 @@ parent_mem_access_asserts(int readfd, int writefd, char *shared_pg,
   if (fstval != SHAREDMEM_FSTVAL) {
     printf(1, "%s failed: parent read value %c from shared memory.\n",
            testname, fstval);
-    kill(childpid);
+    kill(parentpid);
     exit();
   }
   
   *(shared_pg + SHAREDMEM_SNDOFFSET) = SHAREDMEM_SNDVAL;
   
-  // release child
+  // release snd proc
   buf = '>';
   write(writefd, &buf, 1);
 }
 
 void
-child_mem_access_asserts(int readfd, int writefd, char *shared_pg,
-                         int parentpid, const char *testname)
+snd_proc_mem_access_asserts(int readfd, int writefd, char *shared_pg,
+                            int parentpid, const char *testname)
 {
   *(shared_pg + SHAREDMEM_FSTOFFSET) = SHAREDMEM_FSTVAL;
 
-  // release parent
+  // release fst proc
   char buf = '>';
   write(writefd, &buf, 1);
 
-  // wait on parent
+  // wait on fst proc
   read(readfd, &buf, 1);
 
   char sndval = *(shared_pg + SHAREDMEM_SNDOFFSET);
@@ -1987,6 +1988,45 @@ void exit_if_pipe_failed(int piperc)
     printf(1, "Error: pipe() failed.\n");
     exit();    
   }
+}
+
+void
+shmem_unmapped_addresses_rejected_by_syscalls()
+{
+  const char testname[] = "shmem_unmapped_addresses_rejected_by_syscalls";
+  const int SHARED_PG_0 = 0;
+  const int SHARED_PG_2 = 2;
+
+  int parentpid = getpid();
+  int forkrc = fork();
+  if (forkrc == 0) {
+    void *shared_pg_0 = shmem_access(SHARED_PG_0);
+    exit_on_shmem_access_fail(shared_pg_0, SHARED_PG_0, testname, parentpid);
+
+    void *shared_pg_2 = shmem_access(SHARED_PG_2);
+    exit_on_shmem_access_fail(shared_pg_2, SHARED_PG_2, testname, parentpid);
+
+    if (write(1, shared_pg_0 + PGSIZE, 1) != -1) {
+      printf(1, "%s failed: passed unmapped shmem address to a syscall.\n", testname);
+      kill(parentpid);
+      exit();
+    };
+
+    if (write(1, shared_pg_0, 2*PGSIZE + 1) != -1) {
+      printf(1, "%s failed: passed a buffer that contains unmapped shmem (but starts and ends in mapped shmem) to a syscall.\n",
+             testname);
+      kill(parentpid);
+      exit();
+    }
+    exit();
+  } else if (forkrc > 0) {
+    wait();
+  } else {
+    printf(1, "Error in %s: fork() failed.\n", testname);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
 }
 
 void
@@ -2009,26 +2049,38 @@ shmem_access_fork_inherit_test()
 
   int parentpid = getpid();
 
-  int forkrc = fork();
-  if (forkrc == 0) {
+  int forkrc1 = fork();
+  if (forkrc1 == 0) {
     close(childreadpipe[1]);
     close(childwritepipe[0]);
 
-    child_mem_access_asserts(childreadpipe[0], childwritepipe[1],
-                             (char *)shared_pg, parentpid,
-                             testname);
+    snd_proc_mem_access_asserts(childreadpipe[0], childwritepipe[1],
+                                (char *)shared_pg, parentpid,
+                                testname);
     exit();
 
-  } else if (forkrc > 0) {
-    close(childreadpipe[0]);
-    close(childwritepipe[1]);
+  } else if (forkrc1 > 0) {
+    int forkrc2 = fork();
+    if (forkrc2 == 0) {
+      close(childreadpipe[0]);
+      close(childwritepipe[1]);
 
-    parent_mem_access_asserts(childwritepipe[0], childreadpipe[1],
-                              (char *)shared_pg, forkrc,
-                              testname);
+      fst_proc_mem_access_asserts(childwritepipe[0], childreadpipe[1],
+                                (char *)shared_pg, parentpid,
+                                testname);
+      exit();
+    } else if (forkrc2 < 0) {
+      printf(1, "Error in %s: second fork() failed.\n", testname);
+      kill(forkrc1);
+      exit();
+    }
+
+    close(childreadpipe[0]); close(childreadpipe[1]);
+    close(childwritepipe[0]); close(childwritepipe[1]);
+    wait();
     wait();
   } else {
-    printf(1, "Error: fork() failed.\n");
+    printf(1, "Error in %s: fork() failed.\n", testname);
     exit();
   }
 
@@ -2038,7 +2090,7 @@ shmem_access_fork_inherit_test()
 void
 shmem_access_after_fork_test()
 {
-  const char testname[] = "shmem_access_separate_access_test";
+  const char testname[] = "shmem_access_after_fork_test";
 
   int childreadpipe[2];
   int piperc1 = pipe(childreadpipe);
@@ -2052,37 +2104,46 @@ shmem_access_after_fork_test()
 
   int parentpid = getpid();
 
-  int forkrc = fork();
-  if (forkrc == 0) {
+  int forkrc1 = fork();
+  if (forkrc1 == 0) {
     close(childreadpipe[1]);
     close(childwritepipe[0]);
 
     void *shared_pg = shmem_access(SHARED_PG_NUM);
     exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, parentpid);
 
-    child_mem_access_asserts(childreadpipe[0], childwritepipe[1],
-                             (char *)shared_pg, parentpid,
-                             "shmem_access_separate_access_test");
+    snd_proc_mem_access_asserts(childreadpipe[0], childwritepipe[1],
+                                (char *)shared_pg, parentpid, testname);
     exit();
 
-  } else if (forkrc > 0) {
-    close(childreadpipe[0]);
-    close(childwritepipe[1]);
+  } else if (forkrc1 > 0) {
+    int forkrc2 = fork();
+    if (forkrc2 == 0) {
+      close(childreadpipe[0]);
+      close(childwritepipe[1]);
 
-    void *shared_pg = shmem_access(SHARED_PG_NUM);
-    exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, forkrc);
+      void *shared_pg = shmem_access(SHARED_PG_NUM);
+      exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, parentpid);
 
-    parent_mem_access_asserts(childwritepipe[0], childreadpipe[1],
-                              (char *)shared_pg, forkrc,
-                              "shmem_access_separate_access_test");
+      fst_proc_mem_access_asserts(childwritepipe[0], childreadpipe[1],
+                                  (char *)shared_pg, parentpid, testname);
+      exit();
+    } else if (forkrc2 < 0) {
+      printf(1, "Error in %s: second fork() failed\n", testname);
+      kill(forkrc1);
+      exit();
+    }
+
+    close(childreadpipe[0]); close(childreadpipe[1]);
+    close(childwritepipe[0]); close(childwritepipe[1]);
     wait();
-
+    wait();
   } else {
     printf(1, "Error: fork() failed.\n");
     exit();
   }
 
-  printf(1, "shmem_access_separate_access_test passed\n");
+  printf(1, "%s passed\n", testname);
 }
 
 
@@ -2206,8 +2267,9 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  // shmem_access_fork_inherit_test();
-  // shmem_access_after_fork_test();
+  shmem_unmapped_addresses_rejected_by_syscalls();
+  shmem_access_fork_inherit_test();
+  shmem_access_after_fork_test();
   // shmem_count_test();
 
   bad_ptr_to_syscall_test();

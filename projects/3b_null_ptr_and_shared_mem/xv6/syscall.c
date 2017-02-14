@@ -17,7 +17,8 @@
 int
 fetchint(uint addr, int *ip)
 {
-  if(addr < FST_VALID_ADDR || addr >= proc->sz || addr+4 > proc->sz)
+  if(addr < SHMEM_USER_ADDR || addr >= proc->sz || addr+4 > proc->sz ||
+      has_unmapped_shmem(proc->pgdir, addr, 4))
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -31,10 +32,11 @@ fetchstr(uint addr, char **pp)
 {
   char *s, *ep;
 
-  if(addr < FST_VALID_ADDR || addr >= proc->sz)
+  if (addr < SHMEM_USER_ADDR || addr >= proc->sz ||
+       has_unmapped_shmem(proc->pgdir, addr, 1))
     return -1;
   *pp = (char*)addr;
-  ep = (char*)proc->sz;
+  ep = (char*) next_invalid_addr(proc->pgdir, proc->sz, addr);
   for(s = *pp; s < ep; s++)
     if(*s == 0)
       return s - *pp;
@@ -58,8 +60,9 @@ argptr(int n, char **pp, int size)
 
   if(argint(n, &i) < 0)
     return -1;
-  if(size < 0 || (uint)i < FST_VALID_ADDR ||
-      (uint)i >= proc->sz || (uint)i+size > proc->sz)
+  if(size < 0 || (uint)i < SHMEM_USER_ADDR ||
+      (uint)i >= proc->sz || (uint)i+size > proc->sz ||
+      has_unmapped_shmem(proc->pgdir, i, size))
     return -1;
   *pp = (char*)i;
   return 0;

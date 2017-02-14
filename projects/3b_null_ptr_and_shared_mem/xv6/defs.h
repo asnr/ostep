@@ -168,6 +168,8 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+int             has_unmapped_shmem(pde_t*, uint, uint);
+uint            next_invalid_addr(pde_t*, uint, uint);
 void*           shmem_access(int page_number);
 int             shmem_count(int page_number);
 void            seginit(void);
