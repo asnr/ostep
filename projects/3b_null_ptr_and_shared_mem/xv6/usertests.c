@@ -2029,8 +2029,9 @@ shmem_unmapped_addresses_rejected_by_syscalls()
   printf(1, "%s passed\n", testname);
 }
 
+// Run this test inside a child process to avoid shmem pollution
 void
-shmem_access_fork_inherit_test()
+shmem_access_fork_inherit_test(int parentpid)
 {
   const char testname[] = "shmem_access_fork_inherit_test";
 
@@ -2046,8 +2047,6 @@ shmem_access_fork_inherit_test()
 
   void *shared_pg = shmem_access(SHARED_PG_NUM);
   exit_on_shmem_access_fail(shared_pg, SHARED_PG_NUM, testname, NOKILL);
-
-  int parentpid = getpid();
 
   int forkrc1 = fork();
   if (forkrc1 == 0) {
@@ -2085,6 +2084,22 @@ shmem_access_fork_inherit_test()
   }
 
   printf(1, "shmem_access_fork_inherit_test passed\n");
+}
+
+void
+shmem_access_fork_inherit_test0()
+{
+  int parentpid = getpid();
+  int forkrc = fork();
+  if (forkrc == 0) {
+    shmem_access_fork_inherit_test(parentpid);
+    exit();
+  } else if (forkrc > 0) {
+    wait();
+  } else {
+    printf(1, "shmem_access_fork_inherit_test0 error: fork() failed.\n");
+    exit();
+  }
 }
 
 void
@@ -2146,13 +2161,12 @@ shmem_access_after_fork_test()
   printf(1, "%s passed\n", testname);
 }
 
-
 void
 assert_shmem_count_eq(int expected, int actual, const char* testname, int killpid)
 {
   if (actual != expected) {
     printf(1, "%s failed: expected shmem_count to return %d, got %d.\n",
-           expected, actual);
+           testname, expected, actual);
     if (killpid >= 0) {
       kill(killpid);
     }
@@ -2161,9 +2175,23 @@ assert_shmem_count_eq(int expected, int actual, const char* testname, int killpi
 }
 
 void
-shmem_count_test()
+shmem_count_test(int parentpid)
 {
-  const char testname[]  = "shmem_count_test";
+  const char testname[] = "shmem_count_test";
+
+  if (shmem_count(-1) != -1) {
+    printf(1, "%s failed: shmem_count() shouldn't accept a negative argument.\n",
+           testname);
+    kill(parentpid);
+    exit();
+  }
+
+  if (shmem_count(NUM_SHAREABLE_PAGES) != -1) {
+    printf(1, "%s failed: shmem_count() should reject too big page numbers\n",
+           testname);
+    kill(parentpid);
+    exit();
+  }
 
   int childreadpipe[2];
   int piperc1 = pipe(childreadpipe);
@@ -2186,7 +2214,6 @@ shmem_count_test()
   assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_1),
                         testname, NOKILL);
 
-  int parentpid = getpid();
   int forkrc = fork();
   if (forkrc == 0) {
     close(childreadpipe[1]);
@@ -2202,9 +2229,9 @@ shmem_count_test()
     assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_2),
                           testname, parentpid);
 
-    block_until_read("parent", childreadpipe[0], testname, 0, parentpid);
+    write_release("snd proc", childwritepipe[1], testname, 0, parentpid);
 
-    write_release("parent", childwritepipe[1], testname, 0, parentpid);
+    block_until_read("snd proc", childreadpipe[0], testname, 0, parentpid);
 
     assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_2),
                           testname, parentpid);
@@ -2212,25 +2239,24 @@ shmem_count_test()
     exit();
 
   } else if (forkrc > 0) {
-    int childpid = forkrc;
     close(childreadpipe[0]);
     close(childwritepipe[1]);
 
     assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_1),
-                          testname, childpid);
+                          testname, parentpid);
 
-    block_until_read("child", childwritepipe[0], testname, 0, childpid);
+    block_until_read("fst proc", childwritepipe[0], testname, 0, parentpid);
 
     assert_shmem_count_eq(1, shmem_count(SHARED_PG_NUM_2),
-                          testname, childpid);
+                          testname, parentpid);
 
     void *shared_pg_2 = shmem_access(SHARED_PG_NUM_2);
-    exit_on_shmem_access_fail(shared_pg_2, SHARED_PG_NUM_2, testname, childpid);
+    exit_on_shmem_access_fail(shared_pg_2, SHARED_PG_NUM_2, testname, parentpid);
 
     assert_shmem_count_eq(2, shmem_count(SHARED_PG_NUM_2),
-                          testname, childpid);
+                          testname, parentpid);
 
-    write_release("child", childreadpipe[1], testname, 0, childpid);
+    write_release("fst proc", childreadpipe[1], testname, 0, parentpid);
 
     wait();
 
@@ -2247,6 +2273,21 @@ shmem_count_test()
   printf(1, "%s passed\n", testname);
 }
 
+void
+shmem_count_test0()
+{
+  int parentpid = getpid();
+  int forkrc = fork();
+  if (forkrc == 0) {
+    shmem_count_test(parentpid);
+    exit();
+  } else if (forkrc > 0) {
+    wait();
+  } else {
+    printf(1, "shmem_count_test0 error: fork() failed.\n");
+    exit();
+  }
+}
 
 unsigned long randstate = 1;
 unsigned int
@@ -2268,9 +2309,9 @@ main(int argc, char *argv[])
   close(open("usertests.ran", O_CREATE));
 
   shmem_unmapped_addresses_rejected_by_syscalls();
-  shmem_access_fork_inherit_test();
+  shmem_access_fork_inherit_test0();
   shmem_access_after_fork_test();
-  // shmem_count_test();
+  shmem_count_test0();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

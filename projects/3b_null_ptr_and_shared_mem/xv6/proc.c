@@ -37,6 +37,29 @@ getprocs(void)
   return numprocs;
 }
 
+int
+shmem_count(int page_num)
+{
+  if (page_num < 0 || page_num >= NUM_SHAREABLE_PAGES) {
+    return -1;
+  }
+
+  int count = 0;
+  uint shmem_page_addr = SHMEM_USER_ADDR + page_num*PGSIZE;
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state != UNUSED && p->pgdir &&
+        !has_unmapped_shmem(p->pgdir, shmem_page_addr, 1)) {
+      count++;
+    }
+  }
+  release(&ptable.lock);
+
+  return count;
+}
+
+
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
@@ -258,6 +281,7 @@ wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
+        p->pgdir = 0;
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;

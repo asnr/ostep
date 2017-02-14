@@ -39,8 +39,8 @@ addresses between the start of the binary and proc->sz are valid
 This assumption will be broken and the checks updated accordingly.
 
 So, we should reserve four pages of virtual memory, and they should be
-below the heap. We will put them immediately below the heap (i.e. just
-above the stack). This seems the least intrusive option.
+below the heap. We will put them before the user binary (i.e. covering
+pages 2-5 inclusive). This is a non-intrusive option.
 
 The next question is how do we allocate the physical pages? Allocating
 them dynamically seems a simple approach, but for the issue of
@@ -96,13 +96,6 @@ shmem_access(int page_num)
 
   return (void *) proc_va;
 }
-
-int
-shmem_count(int page_num)
-{
-  return 0;
-}
-
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
