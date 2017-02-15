@@ -880,7 +880,7 @@ class process:
 # main program
 #
 parser = OptionParser()
-parser.add_option('-s', '--seed',      default=0,          help='the random seed',                  action='store',      type='int',    dest='seed')
+parser.add_option('-s', '--seed',      default=None,       help='the random seed',                  action='store',      type='int',    dest='seed')
 parser.add_option('-t', '--threads',   default=2,          help='number of threads',                action='store',      type='int',    dest='numthreads')
 parser.add_option('-p', '--program',   default='',         help='source program (in .s)',           action='store',      type='string', dest='progfile')
 parser.add_option('-i', '--interrupt', default=50,         help='interrupt frequency',              action='store',      type='int',    dest='intfreq')
@@ -915,7 +915,7 @@ print 'ARG printstats',          options.printstats
 print 'ARG verbose',             options.verbose
 print ''
 
-seed       = int(options.seed)
+seed       = int(options.seed) if options.seed is not None else None
 numthreads = int(options.numthreads)
 intfreq    = int(options.intfreq)
 zassert(intfreq > 0, 'Interrupt frequency must be greater than 0')
@@ -948,6 +948,8 @@ verbose    = options.verbose
 #
 debug = False
 debug = False
+
+random.seed(seed)
 
 cpu = cpu(memsize, memtrace, regtrace, cctrace, options.solve, verbose)
 
