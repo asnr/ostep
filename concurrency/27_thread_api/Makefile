@@ -7,7 +7,7 @@ clean:
 	rm -f main-race main-deadlock main-deadlock-global main-signal main-signal-cv
 
 main-race: main-race.c mythreads.h
-	gcc -o main-race main-race.c $(FLAGS)
+	clang main-race.c -o main-race -fsanitize=thread -fPIE -g -Wall
 
 main-deadlock: main-deadlock.c mythreads.h
 	gcc -o main-deadlock main-deadlock.c $(FLAGS)
