@@ -21,3 +21,12 @@ This reports a warning identifying the data race as well as:
 * the lines of code in each thread that dangerously access shared memory
 * the symbol name of the shared memory (`balance`)
 * the line of code where the thread is a created
+
+
+###### 2. What happens when you remove one of the offending lines of code? Now add a lock around one of the updates to the shared variable, and then around both. What does helgrind report in each of these cases?
+
+As above, we'll use TSan. Removing the racy accesses from one of the threads and running TSan produces no output and returns with exit code 0.
+
+After adding a lock around just one of the updates to the shared variable, TSan reports a warning as in question 1 that also identifies that one of the threads was holding a lock when it updated the variable and where that lock was initialised. In this case, TSan returns with exit code 134.
+
+After adding a lock around both the updates to the shared variables, TSan produces no output and returns with exit code 0.
