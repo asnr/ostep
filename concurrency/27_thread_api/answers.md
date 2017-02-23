@@ -66,3 +66,22 @@ WARNING: ThreadSanitizer: lock-order-inversion (potential deadlock) (pid=73168)
 
 This tells us that TSan reports false-positives even for relatively simple cases. In particular, the algorithm only has a simple treatment of building a lock graph and finding cycles in it.
 
+
+###### 6. Let’s next look at `main-signal.c`. This code uses a variable (`done`) to signal that the child is done and that the parent can now continue. Why is this code inefficient?
+
+The parent spin waits, checking the value of `done` until it changes. This wastes processor time that could be used by another process (or even the worker thread if the scheduler is trying to schedule both threads onto the same processor).
+
+
+###### 7. Now run helgrind on `main-signal.c`. What does it report? Is the code correct?
+
+I'll run TSan instead (see question 1). TSan reports a data race and a thread leak (the main thread doesn't call `Pthread_join()`). TSan is correct (there is a data race), but it doesn't affect the correctness of the program, assuming that the the instructions aren't reordered so that setting `done` happens before printing to standard out.
+
+
+###### 8. The version in `main-signal-cv.c` uses a condition variable to do the signaling (and associated lock). Why is this code preferred to the previous version? Is it correctness, or performance, or both?
+
+It is a better solution for nontrivial programs, because it is less likely to introduce concurrency bugs as features are added to the signalling mechanism and it will perform better when the wait between signals increases (the condition variable doesn't spin wait or yield, but rather signals to the scheduler that the thread is blocked and shouldn't be scheduled until it receives a signal from another thread).
+
+
+###### 9. Once again run helgrind on `main-signal-cv`. Does it report any errors?
+
+I'll run TSan instead (see question 1). This code doesn't cause TSan to throw any data race warnings (it still throws the trivially fixable thread leak warning).

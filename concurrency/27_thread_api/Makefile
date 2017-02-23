@@ -18,8 +18,8 @@ main-deadlock-global: main-deadlock-global.c mythreads.h
 	clang main-deadlock-global.c -o main-deadlock-global $(CLANG_FLAGS)
 
 main-signal: main-signal.c mythreads.h
-	gcc -o main-signal main-signal.c $(FLAGS)
+	clang main-signal.c -o main-signal $(CLANG_FLAGS)
 
 main-signal-cv: main-signal-cv.c mythreads.h
-	gcc -o main-signal-cv main-signal-cv.c $(FLAGS)
+	clang -o main-signal-cv main-signal-cv.c $(CLANG_FLAGS)
 
