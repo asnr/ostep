@@ -27,6 +27,12 @@ pinit(void)
 }
 
 int
+clone(int fcn, int arg, char *stack)
+{
+  return 77;
+}
+
+int
 getprocs(void)
 {
   int numprocs = 0;

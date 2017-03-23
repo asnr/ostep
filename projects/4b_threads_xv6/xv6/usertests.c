@@ -1887,6 +1887,19 @@ bad_ptr_to_syscall_test()
   printf(1, "bad_ptr_to_syscall_test passed\n");
 }
 
+void
+basic_clone_syscall_test()
+{
+  char testname[] = "basic_clone_syscall_test";
+  int clonerc = clone(0, 0, (void *) 4096);
+  if (clonerc != 77) {
+    printf(1, "%s: clone() failed, it returned %d.\n", testname, clonerc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1905,6 +1918,8 @@ main(int argc, char *argv[])
     exit();
   }
   close(open("usertests.ran", O_CREATE));
+
+  basic_clone_syscall_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

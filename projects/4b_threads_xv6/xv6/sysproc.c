@@ -95,3 +95,17 @@ sys_getprocs(void)
 {
   return getprocs();
 }
+
+int
+sys_clone(void)
+{
+  int func_ptr, arg_ptr;
+  char *stack_ptr;
+
+  if (argint(0, &func_ptr) < 0 || argint(1, &arg_ptr) < 0 ||
+      argptr(2, &stack_ptr, PGSIZE)) {
+    return -1;
+  }
+
+  return clone(func_ptr, arg_ptr, stack_ptr);
+}
