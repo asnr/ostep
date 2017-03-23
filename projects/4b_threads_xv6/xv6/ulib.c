@@ -3,6 +3,18 @@
 #include "fcntl.h"
 #include "user.h"
 #include "x86.h"
+#include "mmu.h"
+
+int
+thread_create(void (*start_routine)(void*), void *arg)
+{
+  void *stack;
+  if ((stack = malloc((uint) PGSIZE)) == 0) {
+    return -1;
+  }
+
+  return clone(start_routine, arg, stack);
+}
 
 char*
 strcpy(char *s, char *t)

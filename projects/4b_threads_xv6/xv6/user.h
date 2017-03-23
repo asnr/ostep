@@ -27,6 +27,7 @@ int getprocs(void);
 int clone(void (*fcn)(void*), void *arg, void *stack);
 
 // ulib.c
+int thread_create(void (*)(void*), void *arg);
 int stat(char*, struct stat*);
 char* strcpy(char*, char*);
 void *memmove(void*, void*, int);

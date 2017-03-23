@@ -1900,6 +1900,23 @@ basic_clone_syscall_test()
   printf(1, "%s passed\n", testname);
 }
 
+void start_routine(void *unused) {
+  return;
+}
+
+void
+basic_thread_create_test()
+{
+  char testname[] = "basic_thread_create_test";
+  int thread_create_rc = thread_create(start_routine, 0);
+  if (thread_create_rc != 77) {
+    printf(1, "%s: thread_create() failed, it returned %d.\n", testname, thread_create_rc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1920,6 +1937,7 @@ main(int argc, char *argv[])
   close(open("usertests.ran", O_CREATE));
 
   basic_clone_syscall_test();
+  basic_thread_create_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();
