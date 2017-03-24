@@ -1900,6 +1900,19 @@ basic_clone_syscall_test()
   printf(1, "%s passed\n", testname);
 }
 
+void
+basic_join_syscall_test()
+{
+  char testname[] = "basic_join_syscall_test";
+  int joinrc = join((void **) 4096);
+  if (joinrc != 818) {
+    printf(1, "%s: join() failed, it returned %d.\n", testname, joinrc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
 void start_routine(void *unused) {
   return;
 }
@@ -1937,6 +1950,7 @@ main(int argc, char *argv[])
   close(open("usertests.ran", O_CREATE));
 
   basic_clone_syscall_test();
+  basic_join_syscall_test();
   basic_thread_create_test();
 
   bad_ptr_to_syscall_test();

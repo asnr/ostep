@@ -109,3 +109,15 @@ sys_clone(void)
 
   return clone(func_ptr, arg_ptr, stack_ptr);
 }
+
+int
+sys_join(void)
+{
+  char *stack;
+
+  if (argptr(0, &stack, sizeof(void *)) < 0) {
+    return -1;
+  }
+
+  return join((void **) stack);
+}

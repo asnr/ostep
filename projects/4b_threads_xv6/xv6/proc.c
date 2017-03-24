@@ -33,6 +33,12 @@ clone(int fcn, int arg, char *stack)
 }
 
 int
+join(void **stack)
+{
+  return 818;
+}
+
+int
 getprocs(void)
 {
   int numprocs = 0;

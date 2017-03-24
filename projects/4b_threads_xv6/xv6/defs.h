@@ -118,6 +118,7 @@ void            wakeup(void*);
 void            yield(void);
 int             getprocs(void);
 int             clone(int, int, char *);
+int             join(void **);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

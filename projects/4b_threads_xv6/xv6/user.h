@@ -25,6 +25,7 @@ int sleep(int);
 int uptime(void);
 int getprocs(void);
 int clone(void (*fcn)(void*), void *arg, void *stack);
+int join(void **stack);
 
 // ulib.c
 int thread_create(void (*)(void*), void *arg);
