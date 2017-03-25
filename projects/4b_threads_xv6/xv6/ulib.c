@@ -16,6 +16,12 @@ thread_create(void (*start_routine)(void*), void *arg)
   return clone(start_routine, arg, stack);
 }
 
+int
+thread_join()
+{
+  return join((void **) 4096);
+}
+
 char*
 strcpy(char *s, char *t)
 {

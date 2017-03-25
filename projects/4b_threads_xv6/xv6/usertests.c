@@ -1930,6 +1930,19 @@ basic_thread_create_test()
   printf(1, "%s passed\n", testname);
 }
 
+void
+basic_thread_join_test()
+{
+  char testname[] = "basic_thread_join_test";
+  int thread_join_rc = thread_join();
+  if (thread_join_rc != 818) {
+    printf(1, "%s: thread_join() failed, it returned %d.\n", testname, thread_join_rc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
 unsigned long randstate = 1;
 unsigned int
 rand()
@@ -1952,6 +1965,7 @@ main(int argc, char *argv[])
   basic_clone_syscall_test();
   basic_join_syscall_test();
   basic_thread_create_test();
+  basic_thread_join_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

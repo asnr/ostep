@@ -29,6 +29,7 @@ int join(void **stack);
 
 // ulib.c
 int thread_create(void (*)(void*), void *arg);
+int thread_join(void);
 int stat(char*, struct stat*);
 char* strcpy(char*, char*);
 void *memmove(void*, void*, int);
