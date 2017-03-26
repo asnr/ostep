@@ -1966,6 +1966,12 @@ main(int argc, char *argv[])
   basic_join_syscall_test();
   basic_thread_create_test();
   basic_thread_join_test();
+  malloc(5000);
+  basic_thread_create_test();
+  basic_thread_join_test();
+  malloc(5000);
+  basic_thread_create_test();
+  basic_thread_join_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

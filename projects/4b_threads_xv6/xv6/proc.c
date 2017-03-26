@@ -26,15 +26,21 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
+// Temporary holding variable to let us check that malloc() and free()
+// calls are working correctly in thread_create() and thread_join().
+char *temp_stack_hack;
+
 int
 clone(int fcn, int arg, char *stack)
 {
+  temp_stack_hack = stack;
   return 77;
 }
 
 int
 join(void **stack)
 {
+  *stack = temp_stack_hack;
   return 818;
 }
 

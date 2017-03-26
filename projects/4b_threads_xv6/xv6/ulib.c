@@ -8,18 +8,61 @@
 int
 thread_create(void (*start_routine)(void*), void *arg)
 {
-  void *stack;
-  if ((stack = malloc((uint) PGSIZE)) == 0) {
+  // The stack needs to be page aligned. The only alignment guarantee
+  // malloc gives us is alignment to sizeof(long) (we will make our
+  // implementation independent of this, however).
+  //
+  // To get around this, we will request more memory than we need and
+  // align the stack ourselves. Later on, join() will only give us the
+  // address of the stack, so we will store the starting address of the
+  // malloc'd block immediately before the stack so that thread_join()
+  // can free() the entire malloc'd block.
+  //
+  // We will request 2*PGSIZE + sizeof(void *) bytes, which will
+  // guarantee we have enough space to correctly align the stack.
+  //
+  // Note that this strategy wastes around a page of memory.
+  const uint HEADER_SZ = sizeof(uint);
+  const uint MEM_SZ = 2 * (uint)PGSIZE + HEADER_SZ;
+  uint mem = (uint) malloc(MEM_SZ);
+  if (mem == 0) {
     return -1;
   }
 
-  return clone(start_routine, arg, stack);
+  uint fst_possible_pgstart = mem + HEADER_SZ;
+  uint stack = PGROUNDUP(fst_possible_pgstart);
+
+  if (stack - HEADER_SZ < mem || stack + PGSIZE > mem + MEM_SZ) {
+    printf(2, "WARNING in thread_create: stack does not fit in malloc'd block");
+  }
+
+  uint *header = (uint *) (stack - HEADER_SZ);
+  *header = mem;
+
+  printf(1, "In thread_create(): mem = %p, MEM_SZ = %x, header = %p, *header = %p, HEADER_SZ = %x, stack = %p\n",
+         (void *) mem, MEM_SZ, header, (void *) *header, HEADER_SZ, (void *) stack);
+
+  int clonerc = clone(start_routine, arg, (void *) stack);
+  if (clonerc == -1) {
+    free((void *) mem);
+  }
+
+  return clonerc;
 }
 
 int
 thread_join()
 {
-  return join((void **) 4096);
+  void *stack;
+  int joinrc = join(&stack);
+
+  uint *header = ((uint *) stack) - 1;
+  void *malloc_block_start = (void *) *header;
+  printf(1, "stack = %p, header = %p, free()'d memory at %p\n", stack, header, malloc_block_start);
+  free(malloc_block_start);
+
+
+  return joinrc;
 }
 
 char*
