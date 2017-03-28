@@ -39,9 +39,6 @@ thread_create(void (*start_routine)(void*), void *arg)
   uint *header = (uint *) (stack - HEADER_SZ);
   *header = mem;
 
-  printf(1, "In thread_create(): mem = %p, MEM_SZ = %x, header = %p, *header = %p, HEADER_SZ = %x, stack = %p\n",
-         (void *) mem, MEM_SZ, header, (void *) *header, HEADER_SZ, (void *) stack);
-
   int clonerc = clone(start_routine, arg, (void *) stack);
   if (clonerc == -1) {
     free((void *) mem);
@@ -55,12 +52,13 @@ thread_join()
 {
   void *stack;
   int joinrc = join(&stack);
+  if (joinrc < 0) {
+    return -1;
+  }
 
   uint *header = ((uint *) stack) - 1;
   void *malloc_block_start = (void *) *header;
-  printf(1, "stack = %p, header = %p, free()'d memory at %p\n", stack, header, malloc_block_start);
   free(malloc_block_start);
-
 
   return joinrc;
 }

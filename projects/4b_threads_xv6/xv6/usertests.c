@@ -1887,56 +1887,263 @@ bad_ptr_to_syscall_test()
   printf(1, "bad_ptr_to_syscall_test passed\n");
 }
 
-void
-basic_clone_syscall_test()
-{
-  char testname[] = "basic_clone_syscall_test";
-  int clonerc = clone(0, 0, (void *) 4096);
-  if (clonerc != 77) {
-    printf(1, "%s: clone() failed, it returned %d.\n", testname, clonerc);
+void exit_if_thread_create_failed(int thread_create_rc, char *testname) {
+  if (thread_create_rc < 0) {
+    printf(1, "%s: thread_create() failed, it returned %d.\n",
+           testname, thread_create_rc);
+    exit();
+  }
+}
+
+void exit_if_thread_join_failed(int thread_join_rc, int expected, char *testname) {
+  if (thread_join_rc != expected) {
+    printf(1, "%s: thread_join() expected return code %d, instead got %d\n",
+           testname, expected, thread_join_rc);
+    exit();
+  }
+}
+
+void exit_immediately(void *unused) {
+  exit();
+}
+
+void basic_thread_test() {
+  char testname[] = "basic_thread_test";
+  int thread_create_rc = thread_create(exit_immediately, 0);
+  if (thread_create_rc < 0) {
+    printf(1, "%s: thread_create failed, it returned %d.\n", testname, thread_create_rc);
+    exit();
+  }
+
+  int thread_join_rc = thread_join();
+  if (thread_join_rc != thread_create_rc) {
+    printf(1, "%s: thread_join expected return code %d, got %d.\n", testname, thread_create_rc, thread_join_rc);
     exit();
   }
 
   printf(1, "%s passed\n", testname);
 }
 
-void
-basic_join_syscall_test()
-{
-  char testname[] = "basic_join_syscall_test";
-  int joinrc = join((void **) 4096);
-  if (joinrc != 818) {
-    printf(1, "%s: join() failed, it returned %d.\n", testname, joinrc);
+int global_for_thread_test = -189;
+
+void modify_global(void *unused) {
+  global_for_thread_test = 45;
+  exit();
+}
+
+void thread_shares_address_space_test() {
+  char testname[] = "thread_shares_address_space_test";
+
+  int thread_create_rc = thread_create(modify_global, 0);
+  exit_if_thread_create_failed(thread_create_rc, testname);
+
+  int thread_join_rc = thread_join();
+  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+
+  if (global_for_thread_test != 45) {
+    printf(1, "%s: global was not modified correctly. Expected %d, got %d\n",
+           testname, 45, global_for_thread_test);
     exit();
   }
 
   printf(1, "%s passed\n", testname);
 }
 
-void start_routine(void *unused) {
+void exit_if_pipe_fails(int piperc, char *testname) {
+  if (piperc == -1) {
+    printf(1, "%s: pipe() failed, return code = %d\n", testname, piperc);
+    exit();
+  }
+}
+
+int childreadfds_global[2];
+int childwritefds_global[2];
+
+void pipe_read_and_write(void *unused) {
+  close(childreadfds_global[1]);
+  close(childwritefds_global[0]);
+
+  int msg;
+  read(childreadfds_global[0], &msg, sizeof(int));
+  write(childwritefds_global[1], &msg, sizeof(int));
+
+  exit();
+}
+
+void thread_starts_with_same_file_descriptors_as_parent() {
+  char testname[] = "thread_starts_with_same_file_descriptors_as_parent";
+
+  int piperc1 = pipe(childreadfds_global);
+  exit_if_pipe_fails(piperc1, testname);
+  int piperc2 = pipe(childwritefds_global);
+  exit_if_pipe_fails(piperc2, testname);
+
+  int thread_create_rc = thread_create(pipe_read_and_write, 0);
+  exit_if_thread_create_failed(thread_create_rc, testname);
+
+  close(childreadfds_global[0]);
+  close(childwritefds_global[1]);
+
+  int sendmsg = 842;
+  write(childreadfds_global[1], &sendmsg, sizeof(int));
+  int recvmsg = 0;
+  read(childwritefds_global[0], &recvmsg, sizeof(int));
+
+  int thread_join_rc = thread_join();
+  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+
+  if (recvmsg != sendmsg) {
+    printf(1, "%s: did not recieve expected message: got %d, expected %d\n",
+           testname, recvmsg, sendmsg);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
+struct thread_arg_test {
+  int x;
+  char y;
+};
+
+void modify_arg_struct(void *raw_arg) {
+  struct thread_arg_test *arg = (struct thread_arg_test *) raw_arg;
+  arg->x = -7;
+  arg->y = 'c';
+  exit();
   return;
 }
 
-void
-basic_thread_create_test()
-{
-  char testname[] = "basic_thread_create_test";
-  int thread_create_rc = thread_create(start_routine, 0);
-  if (thread_create_rc != 77) {
-    printf(1, "%s: thread_create() failed, it returned %d.\n", testname, thread_create_rc);
+void pass_argument_to_child_thread_test() {
+  char testname[] = "pass_argument_to_child_thread_test";
+
+  struct thread_arg_test arg;
+  arg.x = 77;
+  arg.y = '!';
+
+  int thread_create_rc = thread_create(modify_arg_struct, &arg);
+  exit_if_thread_create_failed(thread_create_rc, testname);
+
+  int thread_join_rc = thread_join();
+  if (thread_join_rc != thread_create_rc) {
+    printf(1,"%s: thread_join() returned %d, expected %d.\n", testname, thread_join_rc, thread_create_rc);
+    exit();
+  }
+
+  if (arg.x != -7 || arg.y != 'c') {
+    printf(1, "%s: thread failed to modify args, arg.x = %d, arg.y = %c\n",
+           testname, arg.x, arg.y);
     exit();
   }
 
   printf(1, "%s passed\n", testname);
 }
 
-void
-basic_thread_join_test()
-{
-  char testname[] = "basic_thread_join_test";
+int fib(int n) {
+  if (n == 1) return 1;
+  if (n == 2) return 1;
+  return fib(n - 1) + fib(n - 2);
+}
+
+void calculate_fibonacci_numbers(void *fail_flag_arg) {
+  int *fail_flag = (int *) fail_flag_arg;
+  if (fib(6) != 8 || fib(10) != 55 || fib(20) != 6765) {
+    *fail_flag = 1;
+  }
+  exit();
+}
+
+void each_thread_gets_its_own_stack_test() {
+  char testname[] = "each_thread_gets_its_own_stack_test";
+
+  const int NUM_THREADS = 50;
+  int fail_flag = 0;
+  int thread_create_rc;
+  int i;
+  for (i = 0; i < NUM_THREADS; i++) {
+    thread_create_rc = thread_create(calculate_fibonacci_numbers, &fail_flag);
+    exit_if_thread_create_failed(thread_create_rc, testname);
+  }
+
+  int thread_join_rc;
+  int j;
+  for (j = 0; j < NUM_THREADS; j++) {
+    thread_join_rc = thread_join();
+    if (thread_join_rc < 0) {
+      printf(1, "%s: thread_join() failed, returned %d\n",
+             testname, thread_join_rc);
+      exit();
+    }
+  }
+
+  if (fail_flag) {
+    printf(1, "%s: one of the fibanocci number was calculated incorrectly.\n",
+           testname);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
+void thread_join_doesnt_leak_memory_test() {
+  // To be implemented
+  // Apparently a maximum of 150 pages?
+  // Can use sbrk(0) to see how much memory we've been using?
+}
+
+void join_ignores_forked_children_test() {
+  char testname[] = "join_ignores_forked_children_test";
+
+  int forkrc = fork();
+  if (forkrc == 0) {
+    exit();
+  } else if (forkrc < 0) {
+    printf(1, "%s: fork() failed.\n", testname);
+    exit();
+  }
+
+  void *stack;
+  int joinrc = join(&stack);
+  if (joinrc != -1) {
+    printf(1, "%s: join() should have failed. It returned %d.\n",
+           testname, joinrc);
+    exit();
+  }
+
+  int waitrc = wait();
+  if (waitrc != forkrc) {
+    printf(1, "%s: wait() should have returned %d, got %d.\n",
+           testname, forkrc, waitrc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
+void wait_ignores_child_threads_test() {
+  char testname[] = "wait_ignores_child_threads_test";
+
+  int thread_create_rc = thread_create(exit_immediately, 0);
+  exit_if_thread_create_failed(thread_create_rc, testname);
+
+  int waitrc = wait();
+  if (waitrc != -1) {
+    printf(1, "%s: wait() should have failed, but it returned %d\n",
+           testname, waitrc);
+    exit();
+  }
+
   int thread_join_rc = thread_join();
-  if (thread_join_rc != 818) {
-    printf(1, "%s: thread_join() failed, it returned %d.\n", testname, thread_join_rc);
+  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+
+  printf(1, "%s passed\n", testname);
+}
+
+void join_with_no_child_thread_test() {
+  char testname[] = "join_with_no_child_thread_test";
+  int thread_join_rc = thread_join();
+  if (thread_join_rc != -1) {
+    printf(1, "%s: thread_join() expected return code -1, got %d\n", thread_join_rc);
     exit();
   }
 
@@ -1962,16 +2169,27 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  basic_clone_syscall_test();
-  basic_join_syscall_test();
-  basic_thread_create_test();
-  basic_thread_join_test();
-  malloc(5000);
-  basic_thread_create_test();
-  basic_thread_join_test();
-  malloc(5000);
-  basic_thread_create_test();
-  basic_thread_join_test();
+  // Testing malloc()/free() in thread_create, thread_join, badly
+  // basic_thread_test();
+  // malloc(5000);
+  // basic_thread_test();
+  // malloc(5000);
+  // basic_thread_test();
+  // malloc(5000);
+  // basic_thread_test();
+  // malloc(5000);
+  // basic_thread_test();
+  // malloc(5000);
+  // basic_thread_test();
+
+  thread_shares_address_space_test();
+  thread_starts_with_same_file_descriptors_as_parent();
+  pass_argument_to_child_thread_test();
+  each_thread_gets_its_own_stack_test();
+
+  join_ignores_forked_children_test();
+  wait_ignores_child_threads_test();
+  join_with_no_child_thread_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();

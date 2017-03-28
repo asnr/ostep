@@ -26,24 +26,6 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
-// Temporary holding variable to let us check that malloc() and free()
-// calls are working correctly in thread_create() and thread_join().
-char *temp_stack_hack;
-
-int
-clone(int fcn, int arg, char *stack)
-{
-  temp_stack_hack = stack;
-  return 77;
-}
-
-int
-join(void **stack)
-{
-  *stack = temp_stack_hack;
-  return 818;
-}
-
 int
 getprocs(void)
 {
@@ -103,6 +85,93 @@ found:
   p->context->eip = (uint)forkret;
 
   return p;
+}
+
+int
+clone(int fcn, int arg, char *stack)
+{
+  struct proc *np;
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // Copy process state from p.
+  np->pgdir = proc->pgdir;
+  np->sz = proc->sz;
+  np->parent = proc;
+
+  // Build the new stack
+  uint *sp = (uint *) (((uint) stack) + PGSIZE);  // stack grows downwards, so it starts at top of page
+  sp--;
+  *sp = arg;
+  sp--;
+  *sp = 0xffffffff; // fake return PC
+
+  *np->tf = *proc->tf; // copy all trapframe vals from proc into np
+  np->tf->eip = (uint) fcn;
+  np->tf->esp = (uint) sp;
+
+  uint i;
+  for(i = 0; i < NOFILE; i++)
+    if(proc->ofile[i])
+      np->ofile[i] = filedup(proc->ofile[i]);
+  np->cwd = idup(proc->cwd);
+
+  safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+  int pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+
+  release(&ptable.lock);
+
+  return pid;
+}
+
+int
+join(void **stack)
+{
+  struct proc *p;
+  int havechildthreads, pid;
+
+  acquire(&ptable.lock);
+  for (;;) {
+    // Scan through table looking for exited children.
+    havechildthreads = 0;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if (p->parent != proc || p->pgdir != proc->pgdir) {
+        continue;
+      }
+      havechildthreads = 1;
+      if (p->state == ZOMBIE) {
+        // Found one.
+        pid = p->pid;
+        *stack = (void *) PGROUNDDOWN(p->tf->esp);
+
+        kfree(p->kstack);
+        p->kstack = 0;
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+        release(&ptable.lock);
+
+        return pid;
+      }
+    }
+
+    if (!havechildthreads || proc->killed) {
+      release(&ptable.lock);
+      return -1;
+    }
+
+    sleep(proc, &ptable.lock);
+  }
 }
 
 //PAGEBREAK: 32
@@ -254,6 +323,18 @@ exit(void)
   panic("zombie exit");
 }
 
+// Caller should hold ptable lock
+int
+other_thread_shares_vm_with(struct proc *base_proc) {
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p != base_proc && p->pgdir == base_proc->pgdir) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
@@ -267,7 +348,7 @@ wait(void)
     // Scan through table looking for exited children.
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->parent != proc)
+      if(p->parent != proc || p->pgdir == proc->pgdir)
         continue;
       havekids = 1;
       if(p->state == ZOMBIE){
@@ -275,7 +356,12 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+
+        if (!other_thread_shares_vm_with(p)) {
+          freevm(p->pgdir);
+        }
+        p->pgdir = 0;
+
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
