@@ -27,7 +27,15 @@ int getprocs(void);
 int clone(void (*fcn)(void*), void *arg, void *stack);
 int join(void **stack);
 
+// spinlock
+typedef struct {
+  uint locked;
+} lock_t;
+
 // ulib.c
+void lock_init(lock_t *);
+void lock_acquire(lock_t *);
+void lock_release(lock_t *);
 int thread_create(void (*)(void*), void *arg);
 int thread_join(void);
 int stat(char*, struct stat*);

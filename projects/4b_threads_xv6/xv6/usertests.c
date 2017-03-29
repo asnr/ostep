@@ -1887,7 +1887,8 @@ bad_ptr_to_syscall_test()
   printf(1, "bad_ptr_to_syscall_test passed\n");
 }
 
-void exit_if_thread_create_failed(int thread_create_rc, char *testname) {
+void
+exit_if_thread_create_failed(int thread_create_rc, char *testname) {
   if (thread_create_rc < 0) {
     printf(1, "%s: thread_create() failed, it returned %d.\n",
            testname, thread_create_rc);
@@ -1895,7 +1896,8 @@ void exit_if_thread_create_failed(int thread_create_rc, char *testname) {
   }
 }
 
-void exit_if_thread_join_failed(int thread_join_rc, int expected, char *testname) {
+void
+exit_if_joined_unexpected(int thread_join_rc, int expected, char *testname) {
   if (thread_join_rc != expected) {
     printf(1, "%s: thread_join() expected return code %d, instead got %d\n",
            testname, expected, thread_join_rc);
@@ -1903,7 +1905,17 @@ void exit_if_thread_join_failed(int thread_join_rc, int expected, char *testname
   }
 }
 
-void exit_immediately(void *unused) {
+void
+exit_if_thread_join_error(int thread_join_rc, char *testname) {
+  if (thread_join_rc < 0) {
+    printf(1, "%s: thread_join() error, returned %d\n",
+           testname, thread_join_rc);
+    exit();
+  }
+}
+
+void
+exit_immediately(void *unused) {
   exit();
 }
 
@@ -1938,7 +1950,7 @@ void thread_shares_address_space_test() {
   exit_if_thread_create_failed(thread_create_rc, testname);
 
   int thread_join_rc = thread_join();
-  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+  exit_if_joined_unexpected(thread_join_rc, thread_create_rc, testname);
 
   if (global_for_thread_test != 45) {
     printf(1, "%s: global was not modified correctly. Expected %d, got %d\n",
@@ -1990,7 +2002,7 @@ void thread_starts_with_same_file_descriptors_as_parent() {
   read(childwritefds_global[0], &recvmsg, sizeof(int));
 
   int thread_join_rc = thread_join();
-  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+  exit_if_joined_unexpected(thread_join_rc, thread_create_rc, testname);
 
   if (recvmsg != sendmsg) {
     printf(1, "%s: did not recieve expected message: got %d, expected %d\n",
@@ -2039,9 +2051,9 @@ void pass_argument_to_child_thread_test() {
   printf(1, "%s passed\n", testname);
 }
 
-int fib(int n) {
-  if (n == 1) return 1;
-  if (n == 2) return 1;
+int
+fib(int n) {
+  if (n == 1 || n == 2) return 1;
   return fib(n - 1) + fib(n - 2);
 }
 
@@ -2134,7 +2146,7 @@ void wait_ignores_child_threads_test() {
   }
 
   int thread_join_rc = thread_join();
-  exit_if_thread_join_failed(thread_join_rc, thread_create_rc, testname);
+  exit_if_joined_unexpected(thread_join_rc, thread_create_rc, testname);
 
   printf(1, "%s passed\n", testname);
 }
@@ -2144,6 +2156,57 @@ void join_with_no_child_thread_test() {
   int thread_join_rc = thread_join();
   if (thread_join_rc != -1) {
     printf(1, "%s: thread_join() expected return code -1, got %d\n", thread_join_rc);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
+int counter_for_spinlock_test;
+lock_t lock_for_spinlock_counter_test;
+
+void
+increment_global_sleepily(void *unused)
+{
+  int temp;
+
+  lock_acquire(&lock_for_spinlock_counter_test);
+  temp = counter_for_spinlock_test;
+  sleep(1);
+  temp += 1;
+  counter_for_spinlock_test = temp;
+  lock_release(&lock_for_spinlock_counter_test);
+
+  exit();
+}
+
+void
+spinlock_counter_test()
+{
+  char testname[] = "spinlock_counter_test";
+
+  counter_for_spinlock_test = 0;
+  lock_init(&lock_for_spinlock_counter_test);
+
+  const int NUM_THREADS = 10;
+  int thread_create_rc;
+  int i;
+  for (i = 0; i < NUM_THREADS; i++) {
+    thread_create_rc = thread_create(increment_global_sleepily, 0);
+    exit_if_thread_create_failed(thread_create_rc, testname);
+  }
+
+  int thread_join_rc;
+  int j;
+  for (j = 0; j < NUM_THREADS; j++) {
+    thread_join_rc = thread_join();
+    exit_if_thread_join_error(thread_join_rc, testname);
+  }
+
+  int expected_counter_val = NUM_THREADS;
+  if (counter_for_spinlock_test != expected_counter_val) {
+    printf(1, "%s: expected counter value %d, got %d\n",
+           testname, expected_counter_val, counter_for_spinlock_test);
     exit();
   }
 
@@ -2190,6 +2253,8 @@ main(int argc, char *argv[])
   join_ignores_forked_children_test();
   wait_ignores_child_threads_test();
   join_with_no_child_thread_test();
+
+  spinlock_counter_test();
 
   bad_ptr_to_syscall_test();
   deref_null_ptr_test();
