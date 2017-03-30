@@ -4,13 +4,8 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "x86.h"
-#include "proc.h"
 #include "spinlock.h"
-
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
+#include "proc.h"
 
 static struct proc *initproc;
 
@@ -98,8 +93,13 @@ clone(int fcn, int arg, char *stack)
   }
 
   // Copy process state from p.
+  // Lock proc table here. Might be in the middle of changing address space
+  // in another thread.
+  acquire(&ptable.lock);
   np->pgdir = proc->pgdir;
   np->sz = proc->sz;
+  release(&ptable.lock);
+
   np->parent = proc;
 
   // Build the new stack
@@ -218,18 +218,34 @@ int
 growproc(int n)
 {
   uint sz;
+  int return_code = 0;
+
+  // lock proc table here (think: what if two threads call growproc at the same time?)
+  acquire(&ptable.lock);
 
   sz = proc->sz;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+      return_code = -1;
   } else if(n < 0){
     if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+      return_code = -1;
   }
-  proc->sz = sz;
-  switchuvm(proc);
-  return 0;
+
+  struct proc *p;
+  if (return_code == 0) {
+    proc->sz = sz;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if (p != proc && p->pgdir == proc->pgdir) {
+        p->sz = sz;
+      }
+    }
+    switchuvm(proc);
+  }
+
+  release(&ptable.lock);
+
+  return return_code;
 }
 
 // Create a new process copying p as the parent.
@@ -240,6 +256,7 @@ fork(void)
 {
   int i, pid;
   struct proc *np;
+  uint sz;
 
   // Allocate process.
   if((np = allocproc()) == 0){
@@ -247,13 +264,18 @@ fork(void)
   }
 
   // Copy process state from p.
-  if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
+  acquire(&ptable.lock);
+  sz = proc->sz;
+  np->pgdir = copyuvm(proc->pgdir, sz);
+  release(&ptable.lock);
+
+  if(np->pgdir == 0){
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
     return -1;
   }
-  np->sz = proc->sz;
+  np->sz = sz;
   np->parent = proc;
   *np->tf = *proc->tf;
 

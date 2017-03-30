@@ -2,6 +2,7 @@
 #include "param.h"
 #include "memlayout.h"
 #include "mmu.h"
+#include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
 #include "x86.h"
@@ -93,9 +94,17 @@ exec(char *path, char **argv)
   safestrcpy(proc->name, last, sizeof(proc->name));
 
   // Commit to the user image.
+  // proc table lock prevents another thread that is in the middle of
+  // resizing its memory from believing that this thread is still part
+  // of the same process (because p->pgdir's are the same) and then
+  // modifying this thread's p->sz after this thread has switched out
+  // the old p->pgdir for the new one.
+  acquire(&ptable.lock);
   oldpgdir = proc->pgdir;
   proc->pgdir = pgdir;
   proc->sz = sz;
+  release(&ptable.lock);
+
   proc->tf->eip = elf.entry;  // main
   proc->tf->esp = sp;
   switchuvm(proc);

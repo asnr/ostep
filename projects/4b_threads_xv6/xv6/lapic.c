@@ -9,6 +9,7 @@
 #include "traps.h"
 #include "mmu.h"
 #include "x86.h"
+#include "spinlock.h" // sigh, just so proc.h compiles
 #include "proc.h"  // ncpu
 
 // Local APIC registers, divided by 4 for use as uint[] indices.

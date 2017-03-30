@@ -2103,6 +2103,95 @@ void thread_join_doesnt_leak_memory_test() {
   // Can use sbrk(0) to see how much memory we've been using?
 }
 
+char *increased_parent_sz, *decreased_parent_sz;
+
+lock_t incr_addr_space_lk;
+lock_t decr_addr_space_lk;
+uint address_space_thread_errors;
+uint threads_done_incr_addr_check;
+
+void
+check_address_size_matches_parent()
+{
+  char *my_sz = sbrk(0);
+
+  lock_acquire(&incr_addr_space_lk);
+  if (my_sz != increased_parent_sz) {
+    printf(1, "Expected thread address size %d, got %d\n",
+           increased_parent_sz, my_sz);
+    address_space_thread_errors++;
+  }
+  threads_done_incr_addr_check++;
+  lock_release(&incr_addr_space_lk);
+
+  lock_acquire(&decr_addr_space_lk);
+  my_sz = sbrk(0);
+  if (my_sz != decreased_parent_sz) {
+    printf(1, "Expected thread address size %d, got %d\n",
+           decreased_parent_sz, my_sz);
+    address_space_thread_errors++;
+  }
+  lock_release(&decr_addr_space_lk);
+
+  exit();
+}
+
+void
+modify_address_space_across_threads_test()
+{
+  char testname[] = "modify_address_space_across_threads_test";
+
+  address_space_thread_errors = 0;
+
+  lock_init(&incr_addr_space_lk);
+  lock_init(&decr_addr_space_lk);
+  lock_acquire(&incr_addr_space_lk);
+  lock_acquire(&decr_addr_space_lk);
+
+  const int NUM_THREADS = 5;
+  int thread_create_rc;
+  int i;
+  for (i = 0; i < NUM_THREADS; i++) {
+    thread_create_rc = thread_create(check_address_size_matches_parent, 0);
+    exit_if_thread_create_failed(thread_create_rc, testname);
+  }
+
+  sbrk(4096);
+  increased_parent_sz = sbrk(0);
+
+  lock_release(&incr_addr_space_lk);
+
+  uint num_threads_done = 0;
+  while (num_threads_done < NUM_THREADS) {
+    sleep(0);  // don't want to release it and immediately acquire it again
+    lock_acquire(&incr_addr_space_lk);
+    num_threads_done = threads_done_incr_addr_check;
+    lock_release(&incr_addr_space_lk);
+  }
+
+  // Now we know for sure that all threads have finished
+  // increased address size check.
+
+  sbrk(-113);
+  decreased_parent_sz = sbrk(0);
+
+  lock_release(&decr_addr_space_lk);
+
+  int j, thread_join_rc;
+  for (j = 0; j < NUM_THREADS; j++) {
+    thread_join_rc = thread_join();
+    exit_if_thread_join_error(thread_join_rc, testname);
+  }
+
+  if (address_space_thread_errors) {
+    printf(1, "%s: child threads reported %d address size mismatches.\n",
+           testname, address_space_thread_errors);
+    exit();
+  }
+
+  printf(1, "%s passed\n", testname);
+}
+
 void join_ignores_forked_children_test() {
   char testname[] = "join_ignores_forked_children_test";
 
@@ -2232,23 +2321,12 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  // Testing malloc()/free() in thread_create, thread_join, badly
-  // basic_thread_test();
-  // malloc(5000);
-  // basic_thread_test();
-  // malloc(5000);
-  // basic_thread_test();
-  // malloc(5000);
-  // basic_thread_test();
-  // malloc(5000);
-  // basic_thread_test();
-  // malloc(5000);
-  // basic_thread_test();
-
+  basic_thread_test();
   thread_shares_address_space_test();
   thread_starts_with_same_file_descriptors_as_parent();
   pass_argument_to_child_thread_test();
   each_thread_gets_its_own_stack_test();
+  modify_address_space_across_threads_test();
 
   join_ignores_forked_children_test();
   wait_ignores_child_threads_test();
