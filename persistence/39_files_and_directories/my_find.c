@@ -53,7 +53,7 @@ void search(const char* directory_path)
   while ((directory_entry = readdir(directory)) != NULL) {
     current_filename = directory_entry->d_name;
     if (strncmp(current_filename, ".", 2) == 0 ||
-        strncmp(current_filename, "..", 2) == 0) {
+        strncmp(current_filename, "..", 3) == 0) {
       continue;
     }
     switch(directory_entry->d_type) {
