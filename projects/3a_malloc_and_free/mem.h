@@ -9,7 +9,7 @@
 
 extern int m_error;
 
-int Mem_Init(int sizeOfRegion, int debug);
+void* Mem_Init(int sizeOfRegion);
 void *Mem_Alloc(int size);
 int Mem_Free(void *ptr);
 void Mem_Dump();

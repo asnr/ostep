@@ -4,8 +4,9 @@
 int
 main ()
 {
-  printf("Did run. Mem_Init() = %d, Mem_Free() = %d",
-         Mem_Init(1, 1),
-         Mem_Free((void *)0));
+  void *ptr = Mem_Init(409);
+  printf("Mem_Init() = %p\n", ptr);
+  printf("Mem_Alloc(8000) = %p\n", Mem_Alloc(8000));
+  printf("Mem_Alloc(20) = %p\n", Mem_Alloc(20));
   return 0;
 }
