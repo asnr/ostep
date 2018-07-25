@@ -9,6 +9,9 @@
 
 extern int m_error;
 
+#define MEM_FREE_FAILED    (-1)
+#define MEM_FREE_SUCCEEDED  (0)
+
 void* Mem_Init(int sizeOfRegion);
 void *Mem_Alloc(int size);
 int Mem_Free(void *ptr);

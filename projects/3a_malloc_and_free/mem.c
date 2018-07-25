@@ -5,9 +5,9 @@
 #include <sys/mman.h>
 #include "mem.h"
 
-
 struct header {
   int size;
+  int used;
 };
 
 static struct header* region_start;
@@ -41,22 +41,28 @@ Mem_Init(int sizeOfRegion)
   region_start = (struct header *) ptr;
   printf("region_start = %p\n", region_start);
   region_start->size = mmap_size - sizeof(struct header);
+  region_start->used = 0;
   return ptr;
 }
 
 void
 *Mem_Alloc(int size)
 {
-  printf("Mem_Alloc region_start = %p\n", region_start);
-  if (region_start->size < size) return NULL;
+  if (region_start->size < size || region_start->used) return NULL;
 
+  region_start->used = 1;
   return address_after_header(region_start);
 }
 
 int
 Mem_Free(void *ptr)
 {
-  return 3;
+  struct header *block_header = ((struct header *) ptr) - 1;
+  printf("[Mem_Free] header to free: %p\n", block_header);
+  if (!block_header->used) return MEM_FREE_FAILED;
+
+  block_header->used = 0;
+  return MEM_FREE_SUCCEEDED;
 }
 
 void
