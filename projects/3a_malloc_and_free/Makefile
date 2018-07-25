@@ -1,4 +1,5 @@
-run:
+run: mem_test
+	echo '>>>>>>>>>'
 	./mem_test
 
 mem_test: mem_test.c mem.so
