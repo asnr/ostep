@@ -28,7 +28,7 @@ Mem_Init(int sizeOfRegion)
   int pagesize = getpagesize();
   size_t pages_for_region = (sizeOfRegion + pagesize - 1) / pagesize;
   size_t mmap_size = pages_for_region * pagesize;
-  printf("Requesting %zu bytes from mmap\n", mmap_size);
+  printf("[Mem_Init] Requesting %zu bytes from mmap\n", mmap_size);
 
   void *ptr = mmap(NULL,
                    mmap_size,
@@ -39,7 +39,7 @@ Mem_Init(int sizeOfRegion)
   if (ptr == MAP_FAILED) { perror("mmap"); exit(1); }
 
   region_start = (struct header *) ptr;
-  printf("region_start = %p\n", region_start);
+  printf("[Mem_Init] region_start = %p\n", region_start);
   region_start->size = mmap_size - sizeof(struct header);
   region_start->used = 0;
   region_start->next = NULL;
