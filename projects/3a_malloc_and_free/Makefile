@@ -1,9 +1,9 @@
-run: mem_test
-	echo '>> Test >>>>>>>>>>>>>>>>>>>>>'
-	./mem_test
+run: mem_user_test
+	echo '>> User Test >>>>>>>>>>>>>>>>'
+	./mem_user_test
 
-mem_test: mem_test.c mem.so
-	gcc -lmem -L. -o mem_test mem_test.c -Wall -Werror
+mem_user_test: mem_user_test.c mem.so
+	gcc -lmem -L. -o mem_user_test mem_user_test.c -Wall -Werror
 
 view: mem_view
 	echo '>> View >>>>>>>>>>>>>>>>>>>>>'
@@ -17,4 +17,4 @@ mem.so: mem.h mem.c
 	gcc -shared -o libmem.so mem.o
 
 clean:
-	rm mem.o libmem.so mem_test
+	rm mem.o libmem.so mem_user_test
