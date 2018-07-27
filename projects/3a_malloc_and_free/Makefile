@@ -1,4 +1,4 @@
-run: mem_internal_test mem_user_test
+test: mem_internal_test mem_user_test
 	echo '>> Internal Test >>>>>>>>>>>>'
 	./mem_internal_test
 	echo ''
