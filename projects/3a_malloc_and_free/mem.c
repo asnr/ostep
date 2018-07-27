@@ -5,16 +5,27 @@
 #include <sys/mman.h>
 #include "mem.h"
 
+struct region {
+  int total_size;
+  struct header *next;
+};
+
+static void *
+address_after_region_header(struct region *header)
+{
+  return (void *) (header + 1);
+}
+
 struct header {
   int size;
   int used;
   struct header *next;
 };
 
-static struct header* region_start;
+static struct region* region_start;
 
 static void *
-address_after_header(struct header *header)
+address_after_block_header(struct header *header)
 {
   return (void *) (header + 1);
 }
@@ -38,11 +49,15 @@ Mem_Init(int sizeOfRegion)
                    no_offset);
   if (ptr == MAP_FAILED) { perror("mmap"); exit(1); }
 
-  region_start = (struct header *) ptr;
+  region_start = (struct region *) ptr;
   printf("[Mem_Init] region_start = %p\n", region_start);
-  region_start->size = mmap_size - sizeof(struct header);
-  region_start->used = 0;
-  region_start->next = NULL;
+  region_start->total_size = mmap_size;
+  struct header *first_block =
+    (struct header *) address_after_region_header(region_start);
+  first_block->size = mmap_size - sizeof(struct region) - sizeof(struct header);
+  first_block->used = 0;
+  first_block->next = NULL;
+  region_start->next = first_block;
   return ptr;
 }
 
@@ -59,7 +74,7 @@ static void
 
   // TODO: handle case where not enough room for next header
   // TODO: handle where next header has already been built
-  char *after_header = (char *) (address_after_header(block_header));
+  char *after_header = (char *) (address_after_block_header(block_header));
   struct header *next_header = (struct header *)(after_header + size);
   next_header->size = room_for_next_header - sizeof(struct header);
   next_header->used = 0;
@@ -69,13 +84,13 @@ static void
   block_header->used = 1;
   block_header->size = size;
 
-  return address_after_header(block_header);
+  return address_after_block_header(block_header);
 }
 
 void
 *Mem_Alloc(int size)
 {
-  return alloc_block(size, region_start);
+  return alloc_block(size, region_start->next);
 }
 
 int
