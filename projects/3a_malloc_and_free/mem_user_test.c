@@ -33,5 +33,7 @@ main()
   assert(request_after_free == first_request);
   printf("Mem_Alloc(16) = %p\n", request_after_free);
 
+  printf("\nUser test passed!\n");
+
   return 0;
 }
