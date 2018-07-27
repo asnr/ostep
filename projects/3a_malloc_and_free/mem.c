@@ -51,10 +51,10 @@ Mem_Init(int sizeOfRegion)
 
   region_start = (struct region *) ptr;
   printf("[Mem_Init] region_start = %p\n", region_start);
-  region_start->total_size = mmap_size;
+  region_start->total_size = sizeOfRegion;
   struct header *first_block =
     (struct header *) address_after_region_header(region_start);
-  first_block->size = mmap_size - sizeof(struct region) - sizeof(struct header);
+  first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct header);
   first_block->used = 0;
   first_block->next = NULL;
   region_start->next = first_block;
@@ -107,5 +107,17 @@ Mem_Free(void *ptr)
 void
 Mem_Dump()
 {
+  char *region = (char *) region_start;
+  for (int idx = 0; idx < region_start->total_size; idx++) {
+    if (idx > 0) {
+      if (idx % 16 == 0) {
+        putchar('\n');
+      } else {
+        putchar(' ');
+      }
+    }
+    int byte = ((unsigned int) region[idx]) & 0xff;
+    printf("%02x", byte);
+  }
   return;
 }

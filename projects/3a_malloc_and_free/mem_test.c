@@ -3,7 +3,7 @@
 #include "mem.h"
 
 int
-main ()
+main()
 {
   void *region_start = Mem_Init(4096);
   assert(region_start > (void *)0x100000);
