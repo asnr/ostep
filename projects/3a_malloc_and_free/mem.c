@@ -70,17 +70,20 @@ static void
       alloc_block(size, block_header->next);
   }
 
-  int room_for_next_header = block_header->size - size;
+  int room_for_next_block = block_header->size - size;
 
-  // TODO: handle case where not enough room for next header
   // TODO: handle where next header has already been built
-  char *after_header = (char *) (address_after_block_header(block_header));
-  struct header *next_header = (struct header *)(after_header + size);
-  next_header->size = room_for_next_header - sizeof(struct header);
-  next_header->used = 0;
-  next_header->next = NULL;
+  if (room_for_next_block < sizeof(struct header)) {
+    block_header->next = NULL;
+  } else {
+    char *after_this_header = (char *) (address_after_block_header(block_header));
+    struct header *next_header = (struct header *)(after_this_header + size);
+    next_header->size = room_for_next_block - sizeof(struct header);
+    next_header->used = 0;
+    next_header->next = NULL;
 
-  block_header->next = next_header;
+    block_header->next = next_header;
+  }
   block_header->used = 1;
   block_header->size = size;
 
