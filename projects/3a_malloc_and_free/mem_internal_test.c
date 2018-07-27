@@ -6,6 +6,7 @@ const int CANARY_SIZE_IN_BYTES = 256;
 
 void initialise_canary(char *canary_start, int size);
 void assert_canary_untouched(char *canary_start, int size);
+void fill_memory_with_ones(char *block, int size);
 
 int
 main()
@@ -16,7 +17,12 @@ main()
 
   initialise_canary(canary_start, CANARY_SIZE_IN_BYTES);
 
-  Mem_Alloc(32);
+  int block_size = 32;
+  char *block = (char *) Mem_Alloc(block_size);
+  fill_memory_with_ones(block, block_size);
+  // Fail test if the block size needs to be increased because of changes in
+  // internal header sizes.
+  assert(*(canary_start - 1) == (char)0xff);
 
   assert_canary_untouched(canary_start, CANARY_SIZE_IN_BYTES);
 
@@ -35,5 +41,12 @@ void assert_canary_untouched(char *canary_start, int size)
 {
   for (int idx = 0; idx < size; idx++) {
     assert(canary_start[idx] == 0);
+  }
+}
+
+void fill_memory_with_ones(char *block, int size)
+{
+  for (int idx = 0; idx < size; idx++) {
+    block[idx] = (char)0xff;
   }
 }
