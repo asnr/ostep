@@ -72,13 +72,12 @@ static void
 
   int room_for_next_block = block_header->size - size;
 
-  // TODO: handle where next header has already been built
   if (sizeof(struct header) <= room_for_next_block) {
     char *after_this_header = (char *) (address_after_block_header(block_header));
     struct header *next_header = (struct header *)(after_this_header + size);
     next_header->size = room_for_next_block - sizeof(struct header);
     next_header->used = 0;
-    next_header->next = NULL;
+    next_header->next = block_header->next;
 
     block_header->next = next_header;
   }
