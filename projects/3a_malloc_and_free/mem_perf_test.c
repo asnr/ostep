@@ -26,12 +26,12 @@ main(int argc, char *argv[])
   int num_allocs;
   bool fail_if_too_slow;
   if (argc == 2) {
-    printf(">> Perf measurement >>>>>>>>>\n");
+    printf(">> Perf measurement >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     char *endptr;
     num_allocs = (int) strtol(argv[1], &endptr, 10);
     fail_if_too_slow = FALSE;
   } else if (argc == 1) {
-    printf(">> Perf test >>>>>>>>>>>>>>>>\n");
+    printf(">> Perf test >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
     num_allocs = NUM_ALLOCS_FOR_TEST;
     fail_if_too_slow = TRUE;
   } else {

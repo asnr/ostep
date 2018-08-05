@@ -5,6 +5,8 @@
 int
 main()
 {
+  printf(">> User Test >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
   void *region_start = Mem_Init(4096);
   printf("Mem_Init() = %p\n", region_start);
   assert(region_start > (void *)0x100000);

@@ -11,6 +11,8 @@ void fill_memory_with_ones(char *block, int size);
 int
 main()
 {
+  printf(">> Internal Test >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
+
   int region_size = 64;
   void *region = Mem_Init(region_size);
   char *canary_start = ((char *) region) + region_size;
