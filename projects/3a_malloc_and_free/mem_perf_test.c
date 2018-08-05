@@ -14,8 +14,8 @@ const int SIZE_PER_ALLOC = 16;
 const int BLOCK_HEADER_SIZE = 16;
 const int REGION_HEADER_SIZE = 32;
 
-// Running commit XXXXXX against this measurement script with num_allocs = 40000
-// takes ~8 seconds. We want to be much faster.
+// Running commit f39a34c against this measurement script with
+// num_allocs = 40000 takes ~8 seconds. We want to be much faster.
 const double MAX_SECONDS_ALLOWED = 1.0;
 
 void *allocs[MAX_NUM_ALLOCS];
