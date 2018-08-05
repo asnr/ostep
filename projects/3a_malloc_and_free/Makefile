@@ -6,6 +6,9 @@ test: mem_internal_test mem_user_test
 	./mem_user_test
 
 perf_test: mem_perf_test
+	./mem_perf_test
+
+perf_measure: mem_perf_test
 	./mem_perf_test 10000
 	./mem_perf_test 20000
 	./mem_perf_test 40000

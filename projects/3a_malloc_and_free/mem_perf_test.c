@@ -14,6 +14,8 @@ const int SIZE_PER_ALLOC = 16;
 const int BLOCK_HEADER_SIZE = 16;
 const int REGION_HEADER_SIZE = 32;
 
+// Running commit XXXXXX against this measurement script with num_allocs = 40000
+// takes ~8 seconds. We want to be much faster.
 const double MAX_SECONDS_ALLOWED = 1.0;
 
 void *allocs[MAX_NUM_ALLOCS];
@@ -24,10 +26,12 @@ main(int argc, char *argv[])
   int num_allocs;
   bool fail_if_too_slow;
   if (argc == 2) {
+    printf(">> Perf measurement >>>>>>>>>\n");
     char *endptr;
     num_allocs = (int) strtol(argv[1], &endptr, 10);
     fail_if_too_slow = FALSE;
   } else if (argc == 1) {
+    printf(">> Perf test >>>>>>>>>>>>>>>>\n");
     num_allocs = NUM_ALLOCS_FOR_TEST;
     fail_if_too_slow = TRUE;
   } else {
@@ -52,7 +56,7 @@ main(int argc, char *argv[])
   double cpu_time_taken = ((double) end - start) / CLOCKS_PER_SEC;
 
   if (fail_if_too_slow) {
-    assert(cpu_time_taken > MAX_SECONDS_ALLOWED);
+    assert(cpu_time_taken < MAX_SECONDS_ALLOWED);
   }
 
   printf("Took %f seconds\n", cpu_time_taken);
