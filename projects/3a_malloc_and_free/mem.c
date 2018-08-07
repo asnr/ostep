@@ -7,7 +7,7 @@
 
 struct region {
   int total_size;
-  struct header *next;
+  struct header *first_free_block;
 };
 
 static void *
@@ -19,7 +19,7 @@ address_after_region_header(struct region *header)
 struct header {
   int size;
   int used;
-  struct header *next;
+  struct header *next_free_block;
 };
 
 static struct region* region_start;
@@ -56,18 +56,21 @@ Mem_Init(int sizeOfRegion)
     (struct header *) address_after_region_header(region_start);
   first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct header);
   first_block->used = 0;
-  first_block->next = NULL;
-  region_start->next = first_block;
+  first_block->next_free_block = NULL;
+  region_start->first_free_block = first_block;
   return ptr;
 }
 
 static void
-*alloc_block(int size, struct header *block_header)
+*alloc_block(int size, struct header **free_block_list)
 {
+  struct header *block_header = *free_block_list;
+  /* printf("Block %p: size = %d, used = %d, next = %p\n", block_header, block_header->size, block_header->used, block_header->next_free_block); */
+
   if (block_header->size < size || block_header->used) {
-    return block_header->next == NULL ?
+    return block_header->next_free_block == NULL ?
       NULL :
-      alloc_block(size, block_header->next);
+      alloc_block(size, &(block_header->next_free_block));
   }
 
   int room_for_next_block = block_header->size - size;
@@ -77,12 +80,14 @@ static void
     struct header *next_header = (struct header *)(after_this_header + size);
     next_header->size = room_for_next_block - sizeof(struct header);
     next_header->used = 0;
-    next_header->next = block_header->next;
-
-    block_header->next = next_header;
+    next_header->next_free_block = block_header->next_free_block;
+    *free_block_list = next_header;
+  } else {
+    *free_block_list = block_header->next_free_block;
   }
   block_header->used = 1;
   block_header->size = size;
+  block_header->next_free_block = NULL;
 
   return address_after_block_header(block_header);
 }
@@ -90,7 +95,7 @@ static void
 void
 *Mem_Alloc(int size)
 {
-  return alloc_block(size, region_start->next);
+  return alloc_block(size, &(region_start->first_free_block));
 }
 
 int
@@ -101,6 +106,8 @@ Mem_Free(void *ptr)
   if (!block_header->used) return MEM_FREE_FAILED;
 
   block_header->used = 0;
+  block_header->next_free_block = region_start->first_free_block;
+  region_start->first_free_block = block_header;
   return MEM_FREE_SUCCEEDED;
 }
 
