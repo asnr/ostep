@@ -7,7 +7,7 @@
 
 struct region {
   int total_size;
-  struct header *first_free_block;
+  struct block *first_free_block;
 };
 
 static void *
@@ -16,18 +16,18 @@ address_after_region_header(struct region *header)
   return (void *) (header + 1);
 }
 
-struct header {
+struct block {
   int size;
   int used;
-  struct header *next_free_block;
+  struct block *next_free_block;
 };
 
 static struct region* region_start;
 
 static void *
-address_after_block_header(struct header *header)
+address_after_block_header(struct block *block)
 {
-  return (void *) (header + 1);
+  return (void *) (block + 1);
 }
 
 void*
@@ -52,9 +52,9 @@ Mem_Init(int sizeOfRegion)
   region_start = (struct region *) ptr;
   printf("[Mem_Init] region_start = %p\n", region_start);
   region_start->total_size = sizeOfRegion;
-  struct header *first_block =
-    (struct header *) address_after_region_header(region_start);
-  first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct header);
+  struct block *first_block =
+    (struct block *) address_after_region_header(region_start);
+  first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct block);
   first_block->used = 0;
   first_block->next_free_block = NULL;
   region_start->first_free_block = first_block;
@@ -62,34 +62,34 @@ Mem_Init(int sizeOfRegion)
 }
 
 static void
-*alloc_block(int size, struct header **free_block_list)
+*alloc_block(int size, struct block **free_block_list)
 {
-  struct header *block_header = *free_block_list;
-  /* printf("Block %p: size = %d, used = %d, next = %p\n", block_header, block_header->size, block_header->used, block_header->next_free_block); */
+  struct block *block = *free_block_list;
+  /* printf("Block %p: size = %d, used = %d, next = %p\n", block, block->size, block->used, block->next_free_block); */
 
-  if (block_header->size < size || block_header->used) {
-    return block_header->next_free_block == NULL ?
+  if (block->size < size || block->used) {
+    return block->next_free_block == NULL ?
       NULL :
-      alloc_block(size, &(block_header->next_free_block));
+      alloc_block(size, &(block->next_free_block));
   }
 
-  int room_for_next_block = block_header->size - size;
+  int room_for_next_block = block->size - size;
 
-  if (sizeof(struct header) <= room_for_next_block) {
-    char *after_this_header = (char *) (address_after_block_header(block_header));
-    struct header *next_header = (struct header *)(after_this_header + size);
-    next_header->size = room_for_next_block - sizeof(struct header);
-    next_header->used = 0;
-    next_header->next_free_block = block_header->next_free_block;
-    *free_block_list = next_header;
+  if (sizeof(struct block) <= room_for_next_block) {
+    char *after_this_header = (char *) (address_after_block_header(block));
+    struct block *next_block = (struct block *)(after_this_header + size);
+    next_block->size = room_for_next_block - sizeof(struct block);
+    next_block->used = 0;
+    next_block->next_free_block = block->next_free_block;
+    *free_block_list = next_block;
   } else {
-    *free_block_list = block_header->next_free_block;
+    *free_block_list = block->next_free_block;
   }
-  block_header->used = 1;
-  block_header->size = size;
-  block_header->next_free_block = NULL;
+  block->used = 1;
+  block->size = size;
+  block->next_free_block = NULL;
 
-  return address_after_block_header(block_header);
+  return address_after_block_header(block);
 }
 
 void
@@ -101,13 +101,13 @@ void
 int
 Mem_Free(void *ptr)
 {
-  struct header *block_header = ((struct header *) ptr) - 1;
-  printf("[Mem_Free] header to free: %p\n", block_header);
-  if (!block_header->used) return MEM_FREE_FAILED;
+  struct block *block = ((struct block *) ptr) - 1;
+  printf("[Mem_Free] header to free: %p\n", block);
+  if (!block->used) return MEM_FREE_FAILED;
 
-  block_header->used = 0;
-  block_header->next_free_block = region_start->first_free_block;
-  region_start->first_free_block = block_header;
+  block->used = 0;
+  block->next_free_block = region_start->first_free_block;
+  region_start->first_free_block = block;
   return MEM_FREE_SUCCEEDED;
 }
 
