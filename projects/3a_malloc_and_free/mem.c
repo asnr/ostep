@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <sys/mman.h>
 #include "mem.h"
 
@@ -18,11 +19,25 @@ address_after_region_header(struct region *header)
 
 struct block {
   int size;
-  int used;
   struct block *next_free_block;
 };
 
 static struct region* region_start;
+
+// We depend on 1 never being a valid (userland) memory address
+static struct block* FREE_LIST_END = (struct block *) 1;
+
+bool
+is_block_free(struct block *block)
+{
+  return block->next_free_block != NULL;
+}
+
+bool
+is_last_block_in_free_list(struct block *block)
+{
+  return block->next_free_block == FREE_LIST_END;
+}
 
 static void *
 address_after_block_header(struct block *block)
@@ -55,8 +70,7 @@ Mem_Init(int sizeOfRegion)
   struct block *first_block =
     (struct block *) address_after_region_header(region_start);
   first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct block);
-  first_block->used = 0;
-  first_block->next_free_block = NULL;
+  first_block->next_free_block = FREE_LIST_END;
   region_start->first_free_block = first_block;
   return ptr;
 }
@@ -65,10 +79,9 @@ static void
 *alloc_block(int size, struct block **free_block_list)
 {
   struct block *block = *free_block_list;
-  /* printf("Block %p: size = %d, used = %d, next = %p\n", block, block->size, block->used, block->next_free_block); */
 
-  if (block->size < size || block->used) {
-    return block->next_free_block == NULL ?
+  if (block->size < size) {
+    return is_last_block_in_free_list(block) ?
       NULL :
       alloc_block(size, &(block->next_free_block));
   }
@@ -79,13 +92,11 @@ static void
     char *after_this_header = (char *) (address_after_block_header(block));
     struct block *next_block = (struct block *)(after_this_header + size);
     next_block->size = room_for_next_block - sizeof(struct block);
-    next_block->used = 0;
     next_block->next_free_block = block->next_free_block;
     *free_block_list = next_block;
   } else {
     *free_block_list = block->next_free_block;
   }
-  block->used = 1;
   block->size = size;
   block->next_free_block = NULL;
 
@@ -103,9 +114,8 @@ Mem_Free(void *ptr)
 {
   struct block *block = ((struct block *) ptr) - 1;
   printf("[Mem_Free] header to free: %p\n", block);
-  if (!block->used) return MEM_FREE_FAILED;
+  if (is_block_free(block)) return MEM_FREE_FAILED;
 
-  block->used = 0;
   block->next_free_block = region_start->first_free_block;
   region_start->first_free_block = block;
   return MEM_FREE_SUCCEEDED;
