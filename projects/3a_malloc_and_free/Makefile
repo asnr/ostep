@@ -1,6 +1,7 @@
-test: mem_internal_test mem_user_test
+test: mem_internal_test mem_user_test mem_thread_safety_test
 	./mem_internal_test
 	./mem_user_test
+	./mem_thread_safety_test
 
 perf_test: mem_perf_test
 	./mem_perf_test
@@ -18,6 +19,9 @@ mem_user_test: mem_user_test.c mem.so
 
 mem_internal_test: mem_internal_test.c mem.so
 	gcc -lmem -L. -o mem_internal_test mem_internal_test.c -Wall -Werror
+
+mem_thread_safety_test: mem_thread_safety_test.c mem.so
+	gcc -lmem -L. -o mem_thread_safety_test mem_thread_safety_test.c -Wall -Werror
 
 mem_perf_test: mem_perf_test.c mem.so
 	gcc -lmem -L. -o mem_perf_test mem_perf_test.c -Wall -Werror
