@@ -17,7 +17,7 @@ void* worker(void* arg) {
 
 int main(int argc, char *argv[]) {
     Pthread_mutex_init(&lock, NULL);
-    
+
     pthread_t p;
     Pthread_create(&p, NULL, worker, NULL);
 
