@@ -3,24 +3,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <sys/mman.h>
 #include "mem.h"
-
-struct region {
-  int total_size;
-  struct block *first_free_block;
-};
 
 static void *
 address_after_region_header(struct region *header)
 {
   return (void *) (header + 1);
 }
-
-struct block {
-  int size;
-  struct block *next_free_block;
-};
 
 static struct region* region_start;
 
@@ -72,11 +63,15 @@ Mem_Init(int sizeOfRegion)
   first_block->size = sizeOfRegion - sizeof(struct region) - sizeof(struct block);
   first_block->next_free_block = FREE_LIST_END;
   region_start->first_free_block = first_block;
+
+  int mutex_init_rc = pthread_mutex_init(&(region_start->allocator_lock), NULL);
+  if (mutex_init_rc != 0) { perror("pthread_mutex_init"); exit(1); }
+
   return ptr;
 }
 
-static void
-*alloc_block(int size, struct block **free_block_list)
+static void *
+alloc_block(int size, struct block **free_block_list)
 {
   struct block *block = *free_block_list;
 
@@ -103,27 +98,42 @@ static void
   return address_after_block_header(block);
 }
 
-void
-*Mem_Alloc(int size)
+void *
+Mem_Alloc(int size)
 {
-  return alloc_block(size, &(region_start->first_free_block));
+  pthread_mutex_lock(&(region_start->allocator_lock));
+  void *allocation = alloc_block(size, &(region_start->first_free_block));
+  pthread_mutex_unlock(&(region_start->allocator_lock));
+
+  return allocation;
 }
 
 int
 Mem_Free(void *ptr)
 {
+  pthread_mutex_lock(&(region_start->allocator_lock));
+
+  int return_code;
   struct block *block = ((struct block *) ptr) - 1;
   printf("[Mem_Free] header to free: %p\n", block);
-  if (is_block_free(block)) return MEM_FREE_FAILED;
+  if (is_block_free(block)) {
+    return_code = MEM_FREE_FAILED;
+  } else {
+    block->next_free_block = region_start->first_free_block;
+    region_start->first_free_block = block;
+    return_code = MEM_FREE_SUCCEEDED;
+  }
 
-  block->next_free_block = region_start->first_free_block;
-  region_start->first_free_block = block;
-  return MEM_FREE_SUCCEEDED;
+  pthread_mutex_unlock(&(region_start->allocator_lock));
+
+  return return_code;
 }
 
 void
 Mem_Dump()
 {
+  pthread_mutex_lock(&(region_start->allocator_lock));
+
   char *region = (char *) region_start;
   for (int idx = 0; idx < region_start->total_size; idx++) {
     if (idx > 0) {
@@ -136,5 +146,6 @@ Mem_Dump()
     int byte = ((unsigned int) region[idx]) & 0xff;
     printf("%02x", byte);
   }
-  return;
+
+  pthread_mutex_unlock(&(region_start->allocator_lock));
 }

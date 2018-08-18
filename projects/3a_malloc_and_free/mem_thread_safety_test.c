@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include "mem.h"
 
-const size_t NUM_ALLOCS_PER_THREAD = 100;
+const size_t NUM_ALLOCS_PER_THREAD = 100000;
 const size_t MEM_ALLOC_SIZE = 16;
 
 struct thread_args {

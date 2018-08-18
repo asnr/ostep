@@ -13,13 +13,13 @@ main()
 {
   printf(">> Internal Test >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
 
-  int region_size = 64;
+  int block_size = 32;
+  int region_size = sizeof(struct region) + sizeof(struct block) + block_size;
   void *region = Mem_Init(region_size);
   char *canary_start = ((char *) region) + region_size;
 
   initialise_canary(canary_start, CANARY_SIZE_IN_BYTES);
 
-  int block_size = 32;
   char *block = (char *) Mem_Alloc(block_size);
   fill_memory_with_ones(block, block_size);
   // Fail test if the block size needs to be increased because of changes in

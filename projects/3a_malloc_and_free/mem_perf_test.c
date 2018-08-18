@@ -40,7 +40,7 @@ main(int argc, char *argv[])
   }
 
   int region_size =
-    REGION_HEADER_SIZE + num_allocs * (SIZE_PER_ALLOC + BLOCK_HEADER_SIZE);
+    sizeof(struct region) + num_allocs * (sizeof(struct block) + SIZE_PER_ALLOC);
 
   clock_t start = clock();
 
