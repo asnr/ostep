@@ -7,25 +7,32 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include "page_queue.h"
 
 const char LINK_PREFIX[] = "link:";
 
 const size_t MAX_URL_SIZE = 1028;
-char url_buffer[MAX_URL_SIZE + 1];
+const size_t MAX_URL_SIZE_WITH_NUL = 1028 + 1;
+char url_buffer[MAX_URL_SIZE_WITH_NUL];
 
-void parse_page(char *url, char *contents, void (*_edge_fn)(char *from, char *to));
+void parse_loop(struct page_queue *page_queue, void (*_edge_fn)(char *, char *));
 
 int crawl(char *start_url,
-	  int download_workers,
-	  int parse_workers,
-	  int queue_size,
-	  char * (*_fetch_fn)(char *url),
-	  void (*_edge_fn)(char *from, char *to)) {
+	        int download_workers,
+	        int parse_workers,
+	        int queue_size,
+	        char * (*_fetch_fn)(char *url),
+	        void (*_edge_fn)(char *from, char *to)) {
+  /* struct url_queue url_queue; */
+  /* url_queue_init(&url_queue, queue_size); */
+  struct page_queue page_queue;
+  page_queue_init(&page_queue);
 
   char *contents = _fetch_fn(start_url);
   printf("%s", contents);
+  page_queue_enqueue(&page_queue, start_url, contents);
 
-  parse_page(start_url, contents, _edge_fn);
+  parse_loop(&page_queue, _edge_fn);
 
   return -1;
 }
@@ -60,19 +67,28 @@ char *copy_url_to_buffer(char *link_prefix, char *buffer, size_t buffer_size)
   return url_start + length;
 }
 
-void parse_page(char *url, char *contents, void (*_edge_fn)(char *from, char *to))
+void parse_page(struct page *page, void (*_edge_fn)(char *from, char *to))
 {
-  char *position = contents;
+  char *position = page->contents;
   char *next_link_prefix = strstr(position, LINK_PREFIX);
   while (next_link_prefix != NULL) {
     position = copy_url_to_buffer(next_link_prefix, url_buffer, MAX_URL_SIZE);
     bool valid_url = *url_buffer != '\0';
     if (valid_url) {
-      _edge_fn(url, url_buffer);
+      _edge_fn(page->url, url_buffer);
     } else {
-      // link too long or empty, do something?
+      // TODO: link too long or empty, do something?
     }
 
     next_link_prefix = strstr(position, LINK_PREFIX);
+  }
+}
+
+void parse_loop(struct page_queue *page_queue, void (*_edge_fn)(char *, char *))
+{
+  struct page *page = page_queue_dequeue(page_queue);
+  while (page) {
+    parse_page(page, _edge_fn);
+    page = page_queue_dequeue(page_queue);
   }
 }

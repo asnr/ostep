@@ -11,8 +11,9 @@ web_tester : web_tester.c cs537.c libcrawler.so
 	gcc -g -L. -lcrawler -lpthread web_tester.c cs537.c -Wall -Werror -o web_tester
 
 libcrawler.so : crawler.c
+	gcc -g -fpic -c page_queue.c -Wall -Werror -o page_queue.o
 	gcc -g -fpic -c crawler.c -Wall -Werror -o crawler.o
-	gcc -g -shared -o libcrawler.so crawler.o
+	gcc -g -shared -o libcrawler.so crawler.o page_queue.o
 
 .PHONY: clean
 clean :
