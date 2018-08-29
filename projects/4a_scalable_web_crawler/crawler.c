@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include "page_queue.h"
+#include "url_queue.h"
 
 const char LINK_PREFIX[] = "link:";
 
@@ -23,12 +24,15 @@ int crawl(char *start_url,
 	        int queue_size,
 	        char * (*_fetch_fn)(char *url),
 	        void (*_edge_fn)(char *from, char *to)) {
-  /* struct url_queue url_queue; */
-  /* url_queue_init(&url_queue, queue_size); */
+  struct url_queue url_queue;
+  url_queue_init(&url_queue, queue_size);
+
   struct page_queue page_queue;
   page_queue_init(&page_queue);
 
-  char *contents = _fetch_fn(start_url);
+  url_queue_enqueue(&url_queue, start_url);
+  char *url = url_queue_dequeue(&url_queue);
+  char *contents = _fetch_fn(url);
   printf("%s", contents);
   page_queue_enqueue(&page_queue, start_url, contents);
 
@@ -78,6 +82,7 @@ void parse_page(struct page *page, void (*_edge_fn)(char *from, char *to))
       _edge_fn(page->url, url_buffer);
     } else {
       // TODO: link too long or empty, do something?
+      exit(1);
     }
 
     next_link_prefix = strstr(position, LINK_PREFIX);
