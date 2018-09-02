@@ -8,6 +8,7 @@
 #include "page_queue.h"
 #include "url_queue.h"
 #include "parser_pool.h"
+#include "downloader_pool.h"
 
 int crawl(char *start_url,
 	        int download_workers,
@@ -21,17 +22,18 @@ int crawl(char *start_url,
   struct page_queue page_queue;
   page_queue_init(&page_queue);
 
+  struct downloader_pool downloader_pool;
+  downloader_pool_init(&downloader_pool, 1);
+
   struct parser_pool parser_pool;
   parser_pool_init(&parser_pool, 1);
 
   url_queue_enqueue(&url_queue, start_url);
-  char *url = url_queue_dequeue(&url_queue);
-  char *contents = _fetch_fn(url);
-  printf("%s", contents);
-  page_queue_enqueue(&page_queue, start_url, contents);
 
+  downloader_pool_start(&downloader_pool, &url_queue, _fetch_fn, &page_queue);
   parser_pool_start(&parser_pool, &page_queue, _edge_fn);
 
+  downloader_pool_join(&downloader_pool);
   parser_pool_join(&parser_pool);
 
   return -1;

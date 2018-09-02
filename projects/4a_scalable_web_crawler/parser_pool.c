@@ -97,7 +97,12 @@ void parse_page(struct page *page, void (*_edge_fn)(char *from, char *to))
 
 void parse_loop(struct page_queue *page_queue, void (*_edge_fn)(char *, char *))
 {
-  struct page *page = page_queue_dequeue(page_queue);
+  struct page *page = NULL;
+  // We expect at least one page to parse
+  while (!page) {
+    page = page_queue_dequeue(page_queue);
+  }
+  // Keep parsing until there is no more
   while (page) {
     parse_page(page, _edge_fn);
     page = page_queue_dequeue(page_queue);
