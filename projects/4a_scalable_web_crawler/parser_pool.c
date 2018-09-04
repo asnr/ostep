@@ -99,11 +99,7 @@ void parse_loop(struct page_queue *page_queue, void (*_edge_fn)(char *, char *))
 {
   struct page *page = NULL;
   page = page_queue_dequeue(page_queue);
-  // Keep parsing until there is no more
-  while (page) {
-    parse_page(page, _edge_fn);
-    page = page_queue_dequeue(page_queue);
-  }
+  parse_page(page, _edge_fn);
 }
 
 static void *parse_loop_entry(void *thread_args)
