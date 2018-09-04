@@ -1,12 +1,16 @@
 #ifndef __PAGE_QUEUE_H
 #define __PAGE_QUEUE_H
 
+#include <pthread.h>
+
 struct page {
   char *url;
   char *contents;
 };
 
 struct page_queue {
+  pthread_cond_t has_elements_cond;
+  pthread_mutex_t lock;
   int size;
   struct page page;
 };
