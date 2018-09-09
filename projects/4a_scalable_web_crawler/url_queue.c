@@ -2,6 +2,9 @@
 #include <assert.h>
 #include "url_queue.h"
 
+char NO_MORE_URLS[] = "\0";
+size_t SIZE_OF_NO_MORE_URLS = 1;
+
 void url_queue_init(struct url_queue *queue, int queue_size)
 {
   int cond_init_rc = pthread_cond_init(&(queue->has_elements_cond), NULL);

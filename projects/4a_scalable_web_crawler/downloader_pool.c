@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include "url_queue.h"
 #include "page_queue.h"
 #include "downloader_pool.h"
@@ -46,16 +47,13 @@ void download_loop(struct url_queue *url_queue,
                    struct page_queue *page_queue)
 {
   char *url = url_queue_dequeue(url_queue);
-  char *contents = _fetch_fn(url);
-  printf(">>> Contents of URL %s\n", url);
-  printf("%s\n", contents);
-  page_queue_enqueue(page_queue, url, contents);
-
-  for (int i = 0; i < 2; i ++) {
-    url = url_queue_dequeue(url_queue);
-    contents = _fetch_fn(url);
+  while (strncmp(url, NO_MORE_URLS, SIZE_OF_NO_MORE_URLS) != 0) {
+    char *contents = _fetch_fn(url);
     printf(">>> Contents of URL %s\n", url);
     printf("%s\n", contents);
+    page_queue_enqueue(page_queue, url, contents);
+
+    url = url_queue_dequeue(url_queue);
   }
 }
 

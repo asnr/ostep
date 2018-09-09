@@ -11,14 +11,14 @@ const char LINK_PREFIX[] = "link:";
 
 static void *parse_loop_entry(void *thread_args);
 
-void parser_pool_init(struct parser_pool *pool, int num_parser_threads)
+void parser_pool_init(struct parser_pool *pool,
+                      int num_parser_threads,
+                      int num_download_workers)
 {
   pool->num_threads = num_parser_threads;
+  pool->num_download_workers = num_download_workers;
   pool->threads = calloc(pool->num_threads, sizeof(pthread_t));
-
-  if (pool->threads == NULL) {
-    exit(1);
-  }
+  assert(pool->threads != NULL);
 }
 
 void parser_pool_start(struct parser_pool *pool,
@@ -26,6 +26,7 @@ void parser_pool_start(struct parser_pool *pool,
                        void (*_edge_fn)(char *from, char *to),
                        struct url_queue *url_queue)
 {
+  (pool->thread_args).num_download_workers = pool->num_download_workers;
   (pool->thread_args).page_queue = page_queue;
   (pool->thread_args)._edge_fn = _edge_fn;
   (pool->thread_args).url_queue = url_queue;
@@ -98,18 +99,26 @@ void parse_page(struct page *page,
   }
 }
 
-void parse_loop(struct page_queue *page_queue,
+void parse_loop(int num_download_workers,
+                struct page_queue *page_queue,
                 void (*_edge_fn)(char *, char *),
                 struct url_queue *url_queue)
 {
   struct page *page = NULL;
   page = page_queue_dequeue(page_queue);
   parse_page(page, _edge_fn, url_queue);
+
+  for (int i = 0; i < num_download_workers; i++) {
+    url_queue_enqueue(url_queue, NO_MORE_URLS);
+  }
 }
 
 static void *parse_loop_entry(void *thread_args)
 {
   struct parser_thread_args *args = (struct parser_thread_args *) thread_args;
-  parse_loop(args->page_queue, args->_edge_fn, args->url_queue);
+  parse_loop(args->num_download_workers,
+             args->page_queue,
+             args->_edge_fn,
+             args->url_queue);
   return NULL;
 }

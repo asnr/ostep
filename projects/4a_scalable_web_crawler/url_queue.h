@@ -3,6 +3,9 @@
 
 #include <pthread.h>
 
+extern char NO_MORE_URLS[];
+extern size_t SIZE_OF_NO_MORE_URLS;
+
 struct url_queue {
   pthread_cond_t has_elements_cond;
   pthread_cond_t has_space_cond;

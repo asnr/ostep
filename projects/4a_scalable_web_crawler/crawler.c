@@ -22,11 +22,12 @@ int crawl(char *start_url,
   struct page_queue page_queue;
   page_queue_init(&page_queue);
 
+  download_workers = 2;
   struct downloader_pool downloader_pool;
-  downloader_pool_init(&downloader_pool, 1);
+  downloader_pool_init(&downloader_pool, download_workers);
 
   struct parser_pool parser_pool;
-  parser_pool_init(&parser_pool, 1);
+  parser_pool_init(&parser_pool, 1, download_workers);
 
   url_queue_enqueue(&url_queue, start_url);
 
