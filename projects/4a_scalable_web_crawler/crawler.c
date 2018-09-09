@@ -31,10 +31,10 @@ int crawl(char *start_url,
   url_queue_enqueue(&url_queue, start_url);
 
   downloader_pool_start(&downloader_pool, &url_queue, _fetch_fn, &page_queue);
-  parser_pool_start(&parser_pool, &page_queue, _edge_fn);
+  parser_pool_start(&parser_pool, &page_queue, _edge_fn, &url_queue);
 
   downloader_pool_join(&downloader_pool);
   parser_pool_join(&parser_pool);
 
-  return -1;
+  return 0;
 }

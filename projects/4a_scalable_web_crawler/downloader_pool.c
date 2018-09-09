@@ -47,8 +47,16 @@ void download_loop(struct url_queue *url_queue,
 {
   char *url = url_queue_dequeue(url_queue);
   char *contents = _fetch_fn(url);
-  printf("%s", contents);
+  printf(">>> Contents of URL %s\n", url);
+  printf("%s\n", contents);
   page_queue_enqueue(page_queue, url, contents);
+
+  for (int i = 0; i < 2; i ++) {
+    url = url_queue_dequeue(url_queue);
+    contents = _fetch_fn(url);
+    printf(">>> Contents of URL %s\n", url);
+    printf("%s\n", contents);
+  }
 }
 
 static void *download_loop_entry(void *thread_args)

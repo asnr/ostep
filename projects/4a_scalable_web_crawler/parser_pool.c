@@ -2,14 +2,12 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <assert.h>
 #include "page_queue.h"
+#include "url_queue.h"
 #include "parser_pool.h"
 
 const char LINK_PREFIX[] = "link:";
-
-const size_t MAX_URL_SIZE = 1028;
-const size_t MAX_URL_SIZE_WITH_NUL = 1028 + 1;
-char url_buffer[MAX_URL_SIZE_WITH_NUL];
 
 static void *parse_loop_entry(void *thread_args);
 
@@ -25,10 +23,12 @@ void parser_pool_init(struct parser_pool *pool, int num_parser_threads)
 
 void parser_pool_start(struct parser_pool *pool,
                        struct page_queue *page_queue,
-                       void (*_edge_fn)(char *from, char *to))
+                       void (*_edge_fn)(char *from, char *to),
+                       struct url_queue *url_queue)
 {
   (pool->thread_args).page_queue = page_queue;
   (pool->thread_args)._edge_fn = _edge_fn;
+  (pool->thread_args).url_queue = url_queue;
 
   for (int i = 0; i < pool->num_threads; i++) {
     int create_rc =
@@ -61,31 +61,34 @@ size_t url_length(char *url)
   return length;
 }
 
-char *copy_url_to_buffer(char *link_prefix, char *buffer, size_t buffer_size)
+char *copy_url_to_buffer(char *link_prefix, char **buffer)
 {
   size_t prefix_length = sizeof(LINK_PREFIX) - 1;
   char *url_start = link_prefix + prefix_length;
 
   size_t length = url_length(url_start);
-  if (0 < length && length < buffer_size) {
-    memcpy(buffer, url_start, length);
-    *(buffer + length) = '\0';
-  } else {
-    *buffer = '\0';
-  }
+  *buffer = (char *) malloc(length + 1);
+  assert(*buffer != NULL);
+
+  memcpy(*buffer, url_start, length);
+  *(*buffer + length) = '\0';
 
   return url_start + length;
 }
 
-void parse_page(struct page *page, void (*_edge_fn)(char *from, char *to))
+void parse_page(struct page *page,
+                void (*_edge_fn)(char *from, char *to),
+                struct url_queue *url_queue)
 {
   char *position = page->contents;
   char *next_link_prefix = strstr(position, LINK_PREFIX);
+  char *url_buffer;
   while (next_link_prefix != NULL) {
-    position = copy_url_to_buffer(next_link_prefix, url_buffer, MAX_URL_SIZE);
+    position = copy_url_to_buffer(next_link_prefix, &url_buffer);
     bool valid_url = *url_buffer != '\0';
     if (valid_url) {
       _edge_fn(page->url, url_buffer);
+      url_queue_enqueue(url_queue, url_buffer);
     } else {
       // TODO: link too long or empty, do something?
       exit(1);
@@ -95,16 +98,18 @@ void parse_page(struct page *page, void (*_edge_fn)(char *from, char *to))
   }
 }
 
-void parse_loop(struct page_queue *page_queue, void (*_edge_fn)(char *, char *))
+void parse_loop(struct page_queue *page_queue,
+                void (*_edge_fn)(char *, char *),
+                struct url_queue *url_queue)
 {
   struct page *page = NULL;
   page = page_queue_dequeue(page_queue);
-  parse_page(page, _edge_fn);
+  parse_page(page, _edge_fn, url_queue);
 }
 
 static void *parse_loop_entry(void *thread_args)
 {
   struct parser_thread_args *args = (struct parser_thread_args *) thread_args;
-  parse_loop(args->page_queue, args->_edge_fn);
+  parse_loop(args->page_queue, args->_edge_fn, args->url_queue);
   return NULL;
 }

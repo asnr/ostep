@@ -6,6 +6,7 @@
 struct parser_thread_args {
   struct page_queue *page_queue;
   void (*_edge_fn)(char *from, char *to);
+  struct url_queue *url_queue;
 };
 
 struct parser_pool {
@@ -19,7 +20,8 @@ void parser_pool_init(struct parser_pool *pool, int num_parser_threads);
 
 void parser_pool_start(struct parser_pool *pool,
                        struct page_queue *page_queue,
-                       void (*_edge_fn)(char *from, char *to));
+                       void (*_edge_fn)(char *from, char *to),
+                       struct url_queue *url_queue);
 
 void parser_pool_join(struct parser_pool *pool);
 
