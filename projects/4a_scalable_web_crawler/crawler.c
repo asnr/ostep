@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include "page_queue.h"
 #include "url_queue.h"
+#include "job_counter.h"
 #include "parser_pool.h"
 #include "downloader_pool.h"
 
@@ -22,6 +23,9 @@ int crawl(char *start_url,
   struct page_queue page_queue;
   page_queue_init(&page_queue);
 
+  struct job_counter job_counter;
+  job_counter_init(&job_counter);
+
   download_workers = 2;
   struct downloader_pool downloader_pool;
   downloader_pool_init(&downloader_pool, download_workers);
@@ -30,9 +34,10 @@ int crawl(char *start_url,
   parser_pool_init(&parser_pool, 1, download_workers);
 
   url_queue_enqueue(&url_queue, start_url);
+  add_a_job(&job_counter);
 
   downloader_pool_start(&downloader_pool, &url_queue, _fetch_fn, &page_queue);
-  parser_pool_start(&parser_pool, &page_queue, _edge_fn, &url_queue);
+  parser_pool_start(&parser_pool, &job_counter, &page_queue, _edge_fn, &url_queue);
 
   downloader_pool_join(&downloader_pool);
   parser_pool_join(&parser_pool);
