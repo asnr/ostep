@@ -28,15 +28,20 @@ void parser_pool_start(struct parser_pool *pool,
                        void (*_edge_fn)(char *from, char *to),
                        struct url_queue *url_queue)
 {
+  pool->job_counter = job_counter;
+
   (pool->thread_args).num_download_workers = pool->num_download_workers;
-  (pool->thread_args).job_counter = job_counter;
+  (pool->thread_args).parser_pool = pool;
   (pool->thread_args).page_queue = page_queue;
   (pool->thread_args)._edge_fn = _edge_fn;
   (pool->thread_args).url_queue = url_queue;
 
   for (int i = 0; i < pool->num_threads; i++) {
     int create_rc =
-      pthread_create(&((pool->threads)[i]), NULL, parse_loop_entry, &(pool->thread_args));
+      pthread_create(&((pool->threads)[i]),
+                     NULL,
+                     parse_loop_entry,
+                     &(pool->thread_args));
 
     if (create_rc != 0) { exit(1); }
   }
@@ -81,7 +86,7 @@ char *copy_url_to_buffer(char *link_prefix, char **buffer)
 }
 
 void parse_page(struct page *page,
-                struct job_counter *job_counter,
+                struct parser_pool *parser_pool,
                 void (*_edge_fn)(char *from, char *to),
                 struct url_queue *url_queue)
 {
@@ -95,7 +100,7 @@ void parse_page(struct page *page,
       // TODO: keep track of visited URLs so we don't loop infinitely along
       // cycles in the web graph.
       _edge_fn(page->url, url_buffer);
-      add_a_job(job_counter);
+      add_a_job(parser_pool->job_counter);
       url_queue_enqueue(url_queue, url_buffer);
     } else {
       // TODO: link too long or empty, do something?
@@ -107,15 +112,15 @@ void parse_page(struct page *page,
 }
 
 void parse_loop(int num_download_workers,
-                struct job_counter *job_counter,
+                struct parser_pool *parser_pool,
                 struct page_queue *page_queue,
                 void (*_edge_fn)(char *, char *),
                 struct url_queue *url_queue)
 {
-  while (there_are_more_jobs(job_counter)) {
+  while (there_are_more_jobs(parser_pool->job_counter)) {
     struct page *page = page_queue_dequeue(page_queue);
-    parse_page(page, job_counter, _edge_fn, url_queue);
-    finished_a_job(job_counter);
+    parse_page(page, parser_pool, _edge_fn, url_queue);
+    finished_a_job(parser_pool->job_counter);
   }
 
   for (int i = 0; i < num_download_workers; i++) {
@@ -127,7 +132,7 @@ static void *parse_loop_entry(void *thread_args)
 {
   struct parser_thread_args *args = (struct parser_thread_args *) thread_args;
   parse_loop(args->num_download_workers,
-             args->job_counter,
+             args->parser_pool,
              args->page_queue,
              args->_edge_fn,
              args->url_queue);
