@@ -18,7 +18,7 @@ struct parser_pool {
   int num_download_workers;
   pthread_t *threads;
   struct parser_thread_args thread_args;
-  struct job_counter *job_counter;
+  struct job_counter job_counter;
   struct string_set visited_urls;
   struct url_queue *url_queue;
 };
@@ -26,7 +26,6 @@ struct parser_pool {
 void parser_pool_init(struct parser_pool *pool,
                       int num_parser_threads,
                       int num_download_workers,
-                      struct job_counter *job_counter,
                       struct url_queue *url_queue);
 
 void parser_pool_put_url_in_queue(struct parser_pool *pool, char *url);

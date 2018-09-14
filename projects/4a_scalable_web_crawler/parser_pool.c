@@ -16,14 +16,13 @@ static void *parse_loop_entry(void *thread_args);
 void parser_pool_init(struct parser_pool *pool,
                       int num_parser_threads,
                       int num_download_workers,
-                      struct job_counter *job_counter,
                       struct url_queue *url_queue)
 {
   pool->num_threads = num_parser_threads;
   pool->num_download_workers = num_download_workers;
-  pool->job_counter = job_counter;
   pool->url_queue = url_queue;
   pool->threads = calloc(pool->num_threads, sizeof(pthread_t));
+  job_counter_init(&(pool->job_counter));
   string_set_init(&(pool->visited_urls));
   assert(pool->threads != NULL);
 }
@@ -52,7 +51,7 @@ void parser_pool_put_url_in_queue(struct parser_pool *pool, char *url)
 {
   bool new_url = !string_set_contains(&(pool->visited_urls), url);
   if (new_url) {
-    add_a_job(pool->job_counter);
+    add_a_job(&(pool->job_counter));
     string_set_add(&(pool->visited_urls), url);
     url_queue_enqueue(pool->url_queue, url);
   }
@@ -122,10 +121,10 @@ void parse_loop(int num_download_workers,
                 struct page_queue *page_queue,
                 void (*_edge_fn)(char *, char *))
 {
-  while (there_are_more_jobs(parser_pool->job_counter)) {
+  while (there_are_more_jobs(&(parser_pool->job_counter))) {
     struct page *page = page_queue_dequeue(page_queue);
     parse_page(page, parser_pool, _edge_fn);
-    finished_a_job(parser_pool->job_counter);
+    finished_a_job(&(parser_pool->job_counter));
   }
 
   for (int i = 0; i < num_download_workers; i++) {
