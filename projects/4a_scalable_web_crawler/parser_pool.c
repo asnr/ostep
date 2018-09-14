@@ -15,28 +15,27 @@ static void *parse_loop_entry(void *thread_args);
 
 void parser_pool_init(struct parser_pool *pool,
                       int num_parser_threads,
-                      int num_download_workers)
+                      int num_download_workers,
+                      struct job_counter *job_counter,
+                      struct url_queue *url_queue)
 {
   pool->num_threads = num_parser_threads;
   pool->num_download_workers = num_download_workers;
+  pool->job_counter = job_counter;
+  pool->url_queue = url_queue;
   pool->threads = calloc(pool->num_threads, sizeof(pthread_t));
   string_set_init(&(pool->visited_urls));
   assert(pool->threads != NULL);
 }
 
 void parser_pool_start(struct parser_pool *pool,
-                       struct job_counter *job_counter,
                        struct page_queue *page_queue,
-                       void (*_edge_fn)(char *from, char *to),
-                       struct url_queue *url_queue)
+                       void (*_edge_fn)(char *from, char *to))
 {
-  pool->job_counter = job_counter;
-
   (pool->thread_args).num_download_workers = pool->num_download_workers;
   (pool->thread_args).parser_pool = pool;
   (pool->thread_args).page_queue = page_queue;
   (pool->thread_args)._edge_fn = _edge_fn;
-  (pool->thread_args).url_queue = url_queue;
 
   for (int i = 0; i < pool->num_threads; i++) {
     int create_rc =
@@ -49,12 +48,21 @@ void parser_pool_start(struct parser_pool *pool,
   }
 }
 
+void parser_pool_put_url_in_queue(struct parser_pool *pool, char *url)
+{
+  bool new_url = !string_set_contains(&(pool->visited_urls), url);
+  if (new_url) {
+    add_a_job(pool->job_counter);
+    string_set_add(&(pool->visited_urls), url);
+    url_queue_enqueue(pool->url_queue, url);
+  }
+}
+
 void parser_pool_join(struct parser_pool *pool)
 {
   for (int i = 0; i < pool->num_threads; i++) {
     int join_rc = pthread_join((pool->threads)[i], NULL);
-
-    if (join_rc != 0) { exit(1); }
+    assert(join_rc == 0);
   }
 }
 
@@ -89,8 +97,7 @@ char *copy_url_to_buffer(char *link_prefix, char **buffer)
 
 void parse_page(struct page *page,
                 struct parser_pool *parser_pool,
-                void (*_edge_fn)(char *from, char *to),
-                struct url_queue *url_queue)
+                void (*_edge_fn)(char *from, char *to))
 {
   char *position = page->contents;
   char *next_link_prefix = strstr(position, LINK_PREFIX);
@@ -100,14 +107,9 @@ void parse_page(struct page *page,
     bool valid_url = *url_buffer != '\0';
     if (valid_url) {
       _edge_fn(page->url, url_buffer);
-      bool new_url = !string_set_contains(&(parser_pool->visited_urls), url_buffer);
-      if (new_url) {
-        add_a_job(parser_pool->job_counter);
-        string_set_add(&(parser_pool->visited_urls), url_buffer);
-        url_queue_enqueue(url_queue, url_buffer);
-      }
+      parser_pool_put_url_in_queue(parser_pool, url_buffer);
     } else {
-      // TODO: link too long or empty, do something?
+      // TODO: link empty, do something?
       exit(1);
     }
 
@@ -118,17 +120,16 @@ void parse_page(struct page *page,
 void parse_loop(int num_download_workers,
                 struct parser_pool *parser_pool,
                 struct page_queue *page_queue,
-                void (*_edge_fn)(char *, char *),
-                struct url_queue *url_queue)
+                void (*_edge_fn)(char *, char *))
 {
   while (there_are_more_jobs(parser_pool->job_counter)) {
     struct page *page = page_queue_dequeue(page_queue);
-    parse_page(page, parser_pool, _edge_fn, url_queue);
+    parse_page(page, parser_pool, _edge_fn);
     finished_a_job(parser_pool->job_counter);
   }
 
   for (int i = 0; i < num_download_workers; i++) {
-    url_queue_enqueue(url_queue, NO_MORE_URLS);
+    url_queue_enqueue(parser_pool->url_queue, NO_MORE_URLS);
   }
 }
 
@@ -138,7 +139,6 @@ static void *parse_loop_entry(void *thread_args)
   parse_loop(args->num_download_workers,
              args->parser_pool,
              args->page_queue,
-             args->_edge_fn,
-             args->url_queue);
+             args->_edge_fn);
   return NULL;
 }
