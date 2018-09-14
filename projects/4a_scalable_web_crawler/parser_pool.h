@@ -3,6 +3,7 @@
 
 #include <pthread.h>
 #include "job_counter.h"
+#include "string_set.h"
 
 struct parser_thread_args {
   struct parser_pool *parser_pool;
@@ -18,6 +19,7 @@ struct parser_pool {
   pthread_t *threads;
   struct parser_thread_args thread_args;
   struct job_counter *job_counter;
+  struct string_set visited_urls;
 };
 
 void parser_pool_init(struct parser_pool *pool,

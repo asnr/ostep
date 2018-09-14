@@ -7,6 +7,7 @@
 #include "url_queue.h"
 #include "parser_pool.h"
 #include "job_counter.h"
+#include "string_set.h"
 
 const char LINK_PREFIX[] = "link:";
 
@@ -19,6 +20,7 @@ void parser_pool_init(struct parser_pool *pool,
   pool->num_threads = num_parser_threads;
   pool->num_download_workers = num_download_workers;
   pool->threads = calloc(pool->num_threads, sizeof(pthread_t));
+  string_set_init(&(pool->visited_urls));
   assert(pool->threads != NULL);
 }
 
@@ -97,11 +99,13 @@ void parse_page(struct page *page,
     position = copy_url_to_buffer(next_link_prefix, &url_buffer);
     bool valid_url = *url_buffer != '\0';
     if (valid_url) {
-      // TODO: keep track of visited URLs so we don't loop infinitely along
-      // cycles in the web graph.
       _edge_fn(page->url, url_buffer);
-      add_a_job(parser_pool->job_counter);
-      url_queue_enqueue(url_queue, url_buffer);
+      bool new_url = !string_set_contains(&(parser_pool->visited_urls), url_buffer);
+      if (new_url) {
+        add_a_job(parser_pool->job_counter);
+        string_set_add(&(parser_pool->visited_urls), url_buffer);
+        url_queue_enqueue(url_queue, url_buffer);
+      }
     } else {
       // TODO: link too long or empty, do something?
       exit(1);

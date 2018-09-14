@@ -33,6 +33,7 @@ int crawl(char *start_url,
   struct parser_pool parser_pool;
   parser_pool_init(&parser_pool, 1, download_workers);
 
+  string_set_add(&parser_pool.visited_urls, start_url);
   url_queue_enqueue(&url_queue, start_url);
   add_a_job(&job_counter);
 
