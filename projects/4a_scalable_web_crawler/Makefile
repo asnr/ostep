@@ -31,7 +31,7 @@ job_counter.o: job_counter.c job_counter.h
 string_set.o: string_set.c string_set.h
 	gcc -g -fpic -c string_set.c -Wall -Werror -o string_set.o
 
-parser_pool.o: parser_pool.c parser_pool.h
+parser_pool.o: parser_pool.c parser_pool.h string_set.h job_counter.h
 	gcc -g -fpic -c parser_pool.c -Wall -Werror -o parser_pool.o
 
 downloader_pool.o: downloader_pool.c downloader_pool.h

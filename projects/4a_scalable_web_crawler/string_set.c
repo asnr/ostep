@@ -8,6 +8,7 @@ const size_t MAX_SIZE = 900;
 
 void string_set_init(struct string_set *set)
 {
+  set->size = 0;
   set->capacity = INITIAL_CAPACITY;
   set->hash_table = calloc(set->capacity, sizeof(*(set->hash_table)));
   assert(set->hash_table != NULL);
@@ -36,9 +37,12 @@ static size_t index_for_element(struct string_set *set, char *s)
 
 void string_set_add(struct string_set *set, char *s)
 {
+  assert(set->size <= MAX_SIZE);
+
   size_t index = index_for_element(set, s);
   if ((set->hash_table)[index] == NULL) {
     (set->hash_table)[index] = s;
+    set->size += 1;
   }
 }
 
