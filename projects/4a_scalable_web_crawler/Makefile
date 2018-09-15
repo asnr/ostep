@@ -1,49 +1,48 @@
+LIBCRAWLER_OBJS = \
+	obj/libcrawler/page_queue.o\
+	obj/libcrawler/url_queue.o\
+	obj/libcrawler/job_counter.o\
+	obj/libcrawler/string_set.o\
+	obj/libcrawler/parser_pool.o\
+	obj/libcrawler/downloader_pool.o\
+	obj/libcrawler/crawler.o
+
+LIBCRAWLER_HEADERS = \
+	src/libcrawler/page_queue.h\
+	src/libcrawler/url_queue.h\
+	src/libcrawler/job_counter.h\
+	src/libcrawler/string_set.h\
+	src/libcrawler/parser_pool.h\
+	src/libcrawler/downloader_pool.h\
+	src/libcrawler/crawler.h
+
 .PHONY: all
 all : libcrawler.so file_tester web_tester
 
-test_file: file_tester
-	./file_tester pagea
+test_file: bin/file_tester
+	bin/file_tester pagea
 
-test_no_cycles: file_tester
-	./file_tester file_web_no_cycles/page_0
+test_no_cycles: bin/file_tester
+	bin/file_tester file_web_no_cycles/page_0
 
-file_tester : file_tester.c libcrawler.so
-	gcc -g -L. -lcrawler -lpthread file_tester.c -Wall -Werror -o file_tester
+test_address_sanitizer: bin/file_tester_address_sanitizer
+	bin/file_tester_address_sanitizer file_web_no_cycles/page_0
 
-test_address_sanitizer: file_tester_address_sanitizer
-	./file_tester_address_sanitizer file_web_no_cycles/page_0
+bin/file_tester : src/file_tester.c obj/libcrawler/libcrawler.so
+	gcc -g -Lobj/libcrawler -lcrawler -lpthread src/file_tester.c -Wall -Werror -o bin/file_tester
 
-file_tester_address_sanitizer : file_tester.c libcrawler.so
-	clang -fsanitize=address -g -L. -lcrawler -lpthread file_tester.c -Wall -Werror -o file_tester_address_sanitizer
+bin/file_tester_address_sanitizer : src/file_tester.c obj/libcrawler/libcrawler.so
+	clang -fsanitize=address -g -Lobj/libcrawler -lcrawler -lpthread src/file_tester.c -Wall -Werror -o bin/file_tester_address_sanitizer
 
-web_tester : web_tester.c cs537.c libcrawler.so
-	gcc -g -L. -lcrawler -lpthread web_tester.c cs537.c -Wall -Werror -o web_tester
+bin/web_tester : src/web_tester.c src/cs537.c obj/libcrawler/libcrawler.so
+	gcc -g -Lobj/libcrawler -lcrawler -lpthread src/web_tester.c src/cs537.c -Wall -Werror -o web_tester
 
-page_queue.o: page_queue.c page_queue.h
-	gcc -g -fpic -c page_queue.c -Wall -Werror -o page_queue.o
+obj/libcrawler/%.o: src/libcrawler/%.c $(LIBCRAWLER_HEADERS)
+	gcc -g -fpic -c $< -Wall -Werror -o $@
 
-url_queue.o: url_queue.c url_queue.h
-	gcc -g -fpic -c url_queue.c -Wall -Werror -o url_queue.o
-
-job_counter.o: job_counter.c job_counter.h
-	gcc -g -fpic -c job_counter.c -Wall -Werror -o job_counter.o
-
-string_set.o: string_set.c string_set.h
-	gcc -g -fpic -c string_set.c -Wall -Werror -o string_set.o
-
-parser_pool.o: parser_pool.c parser_pool.h string_set.h job_counter.h
-	gcc -g -fpic -c parser_pool.c -Wall -Werror -o parser_pool.o
-
-downloader_pool.o: downloader_pool.c downloader_pool.h
-	gcc -g -fpic -c downloader_pool.c -Wall -Werror -o downloader_pool.o
-
-crawler.o: crawler.c
-	gcc -g -fpic -c crawler.c -Wall -Werror -o crawler.o
-
-libcrawler.so : page_queue.o url_queue.o job_counter.o string_set.o parser_pool.o downloader_pool.o crawler.o
-	gcc -g -shared -o libcrawler.so \
-		crawler.o page_queue.o url_queue.o job_counter.o string_set.o parser_pool.o downloader_pool.o
+obj/libcrawler/libcrawler.so: $(LIBCRAWLER_OBJS)
+	gcc -g -shared -o obj/libcrawler/libcrawler.so $(LIBCRAWLER_OBJS)
 
 .PHONY: clean
 clean :
-	rm -f file_tester web_tester libcrawler.so *.o *~
+	rm -f bin/* obj/*.o obj/libcrawler/*
