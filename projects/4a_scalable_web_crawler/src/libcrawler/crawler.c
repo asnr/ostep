@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <unistd.h>
-#include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
 #include <pthread.h>
@@ -28,8 +27,9 @@ int crawl(char *start_url,
   struct downloader_pool downloader_pool;
   downloader_pool_init(&downloader_pool, download_workers);
 
+  parse_workers = 2;
   struct parser_pool parser_pool;
-  parser_pool_init(&parser_pool, 1, download_workers, &url_queue);
+  parser_pool_init(&parser_pool, parse_workers, download_workers, &url_queue);
 
   parser_pool_put_url_in_queue(&parser_pool, start_url);
 

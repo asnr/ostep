@@ -116,20 +116,36 @@ void parse_page(struct page *page,
   }
 }
 
+void tell_other_worker_threads_to_stop(int num_download_workers,
+                                       struct parser_pool *parser_pool,
+                                       struct page_queue *page_queue)
+{
+  for (int i = 0; i < num_download_workers; i++) {
+    url_queue_enqueue(parser_pool->url_queue, NO_MORE_URLS);
+  }
+
+  int parser_workers_to_clean_up = parser_pool->num_download_workers - 1;
+  for (int i = 0; i < parser_workers_to_clean_up; i++) {
+    page_queue_enqueue_no_more_pages(page_queue);
+  }
+}
+
 void parse_loop(int num_download_workers,
                 struct parser_pool *parser_pool,
                 struct page_queue *page_queue,
                 void (*_edge_fn)(char *, char *))
 {
-  while (there_are_more_jobs(&(parser_pool->job_counter))) {
+  while (keep_working(&(parser_pool->job_counter))) {
     struct page *page = page_queue_dequeue(page_queue);
+    if (no_more_pages(page)) { return; }
+
     parse_page(page, parser_pool, _edge_fn);
     finished_a_job(&(parser_pool->job_counter));
   }
 
-  for (int i = 0; i < num_download_workers; i++) {
-    url_queue_enqueue(parser_pool->url_queue, NO_MORE_URLS);
-  }
+  tell_other_worker_threads_to_stop(num_download_workers,
+                                    parser_pool,
+                                    page_queue);
 }
 
 static void *parse_loop_entry(void *thread_args)

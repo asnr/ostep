@@ -3,6 +3,11 @@
 #include <assert.h>
 #include "page_queue.h"
 
+bool no_more_pages(struct page *page)
+{
+  return page->no_more_pages;
+}
+
 void page_queue_init(struct page_queue *queue)
 {
   int cond_init_rc = pthread_cond_init(&(queue->has_elements_cond), NULL);
@@ -14,13 +19,15 @@ void page_queue_init(struct page_queue *queue)
 
 void _page_queue_enqueue(struct page_queue *queue,
                          char *page_url,
-                         char *page_contents)
+                         char *page_contents,
+                         bool no_more_pages)
 {
   struct page_list *end_node = malloc(sizeof(struct page_list));
   assert(end_node != NULL);
 
   (end_node->page).url = page_url;
   (end_node->page).contents = page_contents;
+  (end_node->page).no_more_pages = no_more_pages;
   end_node->next = NULL;
 
   struct page_list **list = &(queue->page_list);
@@ -31,20 +38,35 @@ void _page_queue_enqueue(struct page_queue *queue,
   *list = end_node;
 }
 
-void page_queue_enqueue(struct page_queue *queue,
-                        char *page_url,
-                        char *page_contents)
+void page_queue_enqueue_internal(struct page_queue *queue,
+                                 char *page_url,
+                                 char *page_contents,
+                                 bool no_more_pages)
 {
   int lock_rc = pthread_mutex_lock(&(queue->lock));
   assert(lock_rc == 0);
 
-  _page_queue_enqueue(queue, page_url, page_contents);
+  _page_queue_enqueue(queue, page_url, page_contents, no_more_pages);
 
   pthread_cond_signal(&(queue->has_elements_cond));
 
   lock_rc = pthread_mutex_unlock(&(queue->lock));
   assert(lock_rc == 0);
 }
+
+void page_queue_enqueue(struct page_queue *queue,
+                                 char *page_url,
+                                 char *page_contents)
+{
+  page_queue_enqueue_internal(queue, page_url, page_contents, false);
+}
+
+
+void page_queue_enqueue_no_more_pages(struct page_queue *queue)
+{
+  page_queue_enqueue_internal(queue, NULL, NULL, true);
+}
+
 
 struct page *_page_queue_dequeue(struct page_queue *queue)
 {

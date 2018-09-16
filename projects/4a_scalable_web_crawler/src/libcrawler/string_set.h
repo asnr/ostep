@@ -3,11 +3,13 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 struct string_set {
   char **hash_table;
   size_t size;
   size_t capacity;
+  pthread_mutex_t lock;
 };
 
 void string_set_init(struct string_set *set);
